@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { ArrowUpRight, CheckCircle2 } from 'lucide-react';
+import { ArrowUpRight, CheckCircle2, Clock } from 'lucide-react';
 import { inquirySchema, serviceOptions } from '@/lib/validation';
 import type { InquiryInput } from '@/lib/validation';
 import type { RentalLine } from '@/types/domain';
@@ -111,6 +111,15 @@ export function InquiryForm({
       setBusy(false);
     }
   }
+  // Until the inquiry storage (Supabase) and spam protection are set up, the live site shows a notice instead of a form that cannot send.
+  if (process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_FORMS_ENABLED !== 'true')
+    return (
+      <div className="form-success" role="status">
+        <Clock size={30} />
+        <h2>Online requests are opening soon.</h2>
+        <p>We are setting up our request forms. Please check back shortly.</p>
+      </div>
+    );
   if (success)
     return (
       <div className="form-success" ref={status} tabIndex={-1} role="status">

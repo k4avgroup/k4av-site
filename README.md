@@ -95,7 +95,8 @@ Put an optimized, muted H.264 MP4 in `public/video/` and set `site.hero.video` t
 4. Set `INQUIRY_STORAGE=supabase`.
 5. Create a Cloudflare Turnstile widget for the deployment hostname. Set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and server-only `TURNSTILE_SECRET_KEY`.
 6. Set `NEXT_PUBLIC_SITE_URL` to the exact public origin, for example `https://your-domain.example` with no trailing slash.
-7. Rebuild/redeploy, submit a test inquiry and check the `inquiries` table in Supabase. Verify the anonymous role cannot read it.
+7. Set `NEXT_PUBLIC_FORMS_ENABLED=true`. Until then the live site shows an "Online requests are opening soon" notice instead of the forms (development always shows them).
+8. Rebuild/redeploy, submit a test inquiry and check the `inquiries` table in Supabase. Verify the anonymous role cannot read it.
 
 The service role key must never use a `NEXT_PUBLIC_` prefix. Row-level security denies direct public reads and writes. Requests go through the server API. The table stores kind, status, validated payload and a server-generated equipment/item snapshot. Until an admin dashboard exists, the owner reviews submissions in Supabase. **Email notifications are not implemented.**
 
