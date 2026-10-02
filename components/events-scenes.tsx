@@ -1,7 +1,7 @@
 import layout from '@/data/sketch-layout.json';
 import type { CSSProperties } from 'react';
 import Image from 'next/image';
-import { Frames, Plate, Sprite, type Anchor } from './scene';
+import { Frames, Plate, Sprite, WalkFrames, type Anchor } from './scene';
 import { SignalDiagramOverlay } from './signal-diagram-overlay';
 
 // Board 1 and 2: the room sketch. Board 1 builds it step by step; board 2 shows it at once under the signal lines.
@@ -111,7 +111,7 @@ const st = (name: string) => `${STAGE}/${name}.webp`;
 const T = {
   cases: 0.5,
   push: 0.8,
-  arrive: 4.4,
+  arrive: 3.6,
   watch: 1.3,
   lift: 1.7,
   liftEnd: 4.7,
@@ -130,6 +130,9 @@ export function StageScene() {
     <div className="sc">
       <Plate src={st('plate')} priority />
 
+      {/* the center screen hangs on the back wall, like the two side panels of the plate */}
+      <div className="st-wall" style={w(0.3)} />
+
       {/* the truss goes up in steps, with the lamps under it */}
       <Sprite
         src={st('truss')}
@@ -145,57 +148,60 @@ export function StageScene() {
       />
 
       {/* the road cases */}
-      <Sprite src={st('case-closed')} x={62} y={60} w={9.5} anchor="bottom-center" z={30} delay={T.cases} />
-      <Sprite src={st('case-open')} x={71} y={63} w={10} anchor="bottom-center" z={31} delay={T.cases + 0.25} />
-      <Sprite src={st('case-closed')} x={21} y={59} w={9} anchor="bottom-center" z={30} delay={T.arrive} />
+      <Sprite src={st('case-closed')} x={64} y={60} w={8.3} anchor="bottom-center" z={30} delay={T.cases} />
+      <Sprite src={st('case-open')} x={73} y={63} w={8.7} anchor="bottom-center" z={31} delay={T.cases + 0.25} />
 
-      {/* one worker rolls a case in from the right, then it stays where he parked it */}
+      {/* one worker rolls a case a short way across the middle of the room; the parked case is already under him and stays when he is gone */}
       <Sprite
-        x={50}
-        y={74}
-        w={11.5}
+        x={53.5}
+        y={71.5}
+        w={13.1}
         anchor="bottom-center"
-        z={40}
+        z={45}
         enter="none"
         className="sc-walk"
         style={
           {
-            '--x0': '50%',
-            '--y0': '74%',
-            '--x1': '21%',
-            '--y1': '59%',
-            '--w0': '11.5%',
-            '--w1': '9.5%',
+            '--x0': '53.5%',
+            '--y0': '71.5%',
+            '--x1': '50%',
+            '--y1': '66%',
+            '--w0': '13.1%',
+            '--w1': '12.7%',
             '--dur': `${T.arrive - T.push}s`,
             '--d': `${T.push}s`,
           } as CSSProperties
         }
       >
-        <Frames srcs={[st('pusher-a'), st('pusher-b')]} period={0.7} delay={T.push} />
+        <WalkFrames a={st('pusher-a')} b={st('pusher-b')} period={0.7} cycles={4} delay={T.push} />
       </Sprite>
 
-      {/* two workers watch the truss go up */}
-      <Sprite x={44} y={63} w={8} anchor="bottom-center" z={42} delay={T.watch}>
-        <Frames srcs={[st('stand-a'), st('stand-b')]} period={2.6} delay={T.watch} />
-      </Sprite>
-      <Sprite x={55} y={65} w={8.2} anchor="bottom-center" z={43} delay={T.watch + 0.2}>
-        <Frames srcs={[st('watch-a'), st('watch-b')]} period={3} delay={T.watch + 0.2} />
-      </Sprite>
+      {/* the same case, parked where the man leaves it: it takes over from under him, so it never blinks out */}
+      <Sprite
+        src={st('case-closed')}
+        x={47.9}
+        y={64.8}
+        w={8.5}
+        anchor="bottom-center"
+        z={44}
+        enter="none"
+        className="sc-park-in"
+        delay={T.arrive - 0.2}
+      />
 
-      {/* lighting tech at the console */}
-      <Sprite x={38} y={86} w={13} anchor="bottom-center" z={50} delay={T.tech}>
-        <Frames srcs={[st('tech-a'), st('tech-b')]} period={2.2} delay={T.tech} />
-      </Sprite>
+      {/* two workers watch the truss go up, close to the stage */}
+      <Sprite src={st('stand-a')} x={40} y={50} w={10.5} anchor="bottom-center" z={42} delay={T.watch} />
+      <Sprite src={st('watch-a')} x={60} y={51} w={10.4} anchor="bottom-center" z={43} delay={T.watch + 0.2} />
 
-      {/* a cameraman sets up his camera */}
-      <Sprite src={st('camera')} x={12} y={74} w={10} anchor="bottom-center" z={44} delay={T.camera} />
-      <Sprite x={85} y={72} w={11} anchor="bottom-center" z={44} delay={T.camera + 0.2}>
-        <Frames srcs={[st('cameraman-a'), st('cameraman-b')]} period={2.8} delay={T.camera + 0.2} />
-      </Sprite>
+      {/* sound and lighting at the consoles on the tech platform */}
+      <Sprite src={st('tech-b')} x={38} y={86} w={14.3} anchor="bottom-center" z={50} delay={T.tech} />
+      <Sprite src={st('tech-a')} x={51.5} y={86} w={13} anchor="bottom-center" z={51} delay={T.tech + 0.25} />
 
-      {/* the screen, the projector and its test pattern */}
-      <Sprite src={st('screen')} x={50} y={38} w={15} anchor="bottom-center" z={12} delay={T.projector - 0.6} />
-      <Sprite src={st('projector-worker')} x={50} y={77} w={11.5} anchor="bottom-center" z={46} delay={T.projector} />
+      {/* a cameraman at his camera */}
+      <Sprite src={st('cameraman-a')} x={85} y={72} w={12.1} anchor="bottom-center" z={44} delay={T.camera} />
+
+      {/* the projectionist checks the left screen */}
+      <Sprite src={st('projector-worker')} x={33.5} y={49} w={13.1} anchor="bottom-center" z={46} delay={T.projector} />
 
       <svg className="g-overlay" viewBox="0 0 1672 941" aria-hidden="true" focusable="false" style={{ zIndex: 60 }}>
         <defs>
@@ -221,8 +227,8 @@ export function StageScene() {
             ))}
           </g>
         ))}
-        {/* the projector beam */}
-        <polygon points="835,545 746,268 924,268" fill="url(#st-beam)" className="st-beam" style={w(T.beam)} />
+        {/* the projector beam, from the projector to the left screen on the wall */}
+        <polygon points="550,280 295,195 295,88 500,88" fill="url(#st-beam)" className="st-beam" style={w(T.beam)} />
       </svg>
 
       <div className="st-face" style={w(T.beam)}>
@@ -232,7 +238,6 @@ export function StageScene() {
     </div>
   );
 }
-
 // Board 4: the show. Slides run on the three screens, the presenter gestures and the lights change color slowly.
 const SHOW = '/images/animation/show';
 const sh = (name: string) => `${SHOW}/${name}.webp`;
@@ -254,33 +259,69 @@ const SHOW_LIGHTS = [
   { x: 1127, tx: 1090, d: 3.5 },
   { x: 1283, tx: 1250, d: 4.9 },
 ];
+// the video operator's monitors show the same slides as the big screens (the fourth one is hidden behind his head)
+const MONITORS: { x: number; y: number; w: number; h: number; phase: number }[] = [
+  { x: 652, y: 621, w: 78, h: 80, phase: 1 },
+  { x: 733, y: 621, w: 76, h: 80, phase: 3 },
+  { x: 927, y: 621, w: 104, h: 78, phase: 2 },
+];
+// the camera operator's two small monitors: a close-up of the speaker, and the center screen
+const CAM_SPEAKER = { x: 1475, y: 652, w: 60, h: 66 };
+const CAM_SCREEN = { x: 1540, y: 655, w: 84, h: 76, phase: 0 };
+const PRESENTER = ['presenter-a', 'presenter-b', 'presenter-c', 'presenter-d'].map(sh);
 const pc = (n: number, total: number) => `${(n / total) * 100}%`;
+const rect = (r: { x: number; y: number; w: number; h: number }): CSSProperties => ({
+  left: pc(r.x, 1672),
+  top: pc(r.y, 941),
+  width: pc(r.w, 1672),
+  height: pc(r.h, 941),
+});
+const SLIDES = [1, 2, 3, 4];
+
+function Slides({ phase }: { phase: number }) {
+  return (
+    <>
+      {SLIDES.map((n, i) => (
+        <Image
+          key={n}
+          src={sh(`slide-${n}`)}
+          alt=""
+          fill
+          unoptimized
+          className="sh-slide"
+          style={{ '--d': `${0.5 + ((i + phase) % 4) * SLIDE}s`, '--cycle': `${SLIDE * 4}s` } as CSSProperties}
+        />
+      ))}
+    </>
+  );
+}
 
 export function ShowScene() {
-  const slides = [1, 2, 3, 4];
   return (
     <div className="sc">
-      <Plate src={sh('plate-lit')} priority />
+      <Plate src={sh('plate')} priority />
 
       {SCREENS.map((s, k) => (
-        <div
-          key={k}
-          className="sh-screen"
-          style={{ left: pc(s.x, 1672), top: pc(s.y, 941), width: pc(s.w, 1672), height: pc(s.h, 941) }}
-        >
-          {slides.map((n, i) => (
-            <Image
-              key={n}
-              src={sh(`slide-${n}`)}
-              alt=""
-              fill
-              unoptimized
-              className="sh-slide"
-              style={{ '--d': `${0.5 + ((i + s.phase) % 4) * SLIDE}s`, '--cycle': `${SLIDE * 4}s` } as CSSProperties}
-            />
-          ))}
+        <div key={k} className="sh-screen" style={rect(s)}>
+          <Slides phase={s.phase} />
         </div>
       ))}
+
+      {MONITORS.map((m, k) => (
+        <div key={k} className="sh-screen sh-monitor" style={rect(m)}>
+          <Slides phase={m.phase} />
+        </div>
+      ))}
+
+      {/* the camera operator's monitors: the speaker in close-up, in step with the podium, and the center screen */}
+      <div className="sh-screen sh-monitor sh-cam" style={rect(CAM_SPEAKER)}>
+        <div className="sh-cam-inner">
+          <Frames srcs={PRESENTER} period={SLIDE * 4} delay={0.5} />
+        </div>
+      </div>
+      <div className="sh-screen sh-monitor" style={rect(CAM_SCREEN)}>
+        <Slides phase={CAM_SCREEN.phase} />
+      </div>
 
       <svg className="g-overlay" viewBox="0 0 1672 941" aria-hidden="true" focusable="false" style={{ zIndex: 20 }}>
         <defs>
@@ -304,11 +345,7 @@ export function ShowScene() {
 
       {/* the presenter at the podium: four poses, a new one with every slide */}
       <Sprite x={49.6} y={51.4} w={9} anchor="bottom-center" z={30} delay={0.2}>
-        <Frames
-          srcs={['presenter-a', 'presenter-b', 'presenter-c', 'presenter-d'].map(sh)}
-          period={SLIDE * 4}
-          delay={0.5}
-        />
+        <Frames srcs={PRESENTER} period={SLIDE * 4} delay={0.5} />
       </Sprite>
     </div>
   );

@@ -96,3 +96,46 @@ export function Frames({ srcs, period = 0.6, delay = 0 }: { srcs: string[]; peri
     </>
   );
 }
+
+// A walk cycle that runs a set number of steps and then holds its last pose (so a figure can stop walking).
+export function WalkFrames({
+  a,
+  b,
+  period = 0.6,
+  cycles = 6,
+  delay = 0,
+}: {
+  a: string;
+  b: string;
+  period?: number;
+  cycles?: number;
+  delay?: number;
+}) {
+  const vars = css({ '--period': `${period}s`, '--cycles': cycles, '--d': `${delay}s` });
+  return (
+    <>
+      <Image
+        src={a}
+        alt=""
+        width={640}
+        height={640}
+        loading="eager"
+        unoptimized
+        draggable={false}
+        className="sc-pf sc-pf-a"
+        style={vars}
+      />
+      <Image
+        src={b}
+        alt=""
+        width={640}
+        height={640}
+        loading="eager"
+        unoptimized
+        draggable={false}
+        className="sc-pf sc-pf-b"
+        style={vars}
+      />
+    </>
+  );
+}
