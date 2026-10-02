@@ -1,0 +1,188 @@
+{
+  "canvas": {
+    "width": 1672,
+    "height": 941
+  },
+  "items": [
+    {
+      "id": "screen-left",
+      "file": "board1-screen-left.png",
+      "x": 23.923445,
+      "y": 21.253985,
+      "w": 16.571911,
+      "anchor": "center",
+      "z": 10,
+      "order": 2,
+      "flipX": false
+    },
+    {
+      "id": "screen-center",
+      "file": "board1-screen-center.png",
+      "x": 49.940191,
+      "y": 21.716484,
+      "w": 21.564795,
+      "anchor": "center",
+      "z": 10,
+      "order": 2,
+      "flipX": false
+    },
+    {
+      "id": "screen-right",
+      "file": "board1-screen-right.png",
+      "x": 76.136364,
+      "y": 21.253985,
+      "w": 16.571911,
+      "anchor": "center",
+      "z": 10,
+      "order": 2,
+      "flipX": false
+    },
+    {
+      "id": "speaker-left",
+      "file": "board1-speaker-array.png",
+      "x": 33.19378,
+      "y": 15.844084,
+      "w": 11.370805,
+      "anchor": "center",
+      "z": 20,
+      "order": 3,
+      "flipX": false
+    },
+    {
+      "id": "speaker-right",
+      "file": "board1-speaker-array.png",
+      "x": 66.38756,
+      "y": 15.844084,
+      "w": 11.370805,
+      "anchor": "center",
+      "z": 20,
+      "order": 3,
+      "flipX": true
+    },
+    {
+      "id": "speaker-center",
+      "file": "board1-speaker-cluster-center.png",
+      "x": 49.940191,
+      "y": 10.945802,
+      "w": 4.744255,
+      "anchor": "center",
+      "z": 20,
+      "order": 3,
+      "flipX": false
+    },
+    {
+      "id": "podium",
+      "file": "board1-podium.png",
+      "x": 49.884469,
+      "y": 37.833345,
+      "w": 4.183926,
+      "anchor": "bottom-center",
+      "z": 30,
+      "order": 4,
+      "flipX": false
+    },
+    {
+      "id": "stage-monitor-left",
+      "file": "board1-stage-monitor.png",
+      "x": 44.497608,
+      "y": 38.99545,
+      "w": 3.234719,
+      "anchor": "bottom-center",
+      "z": 40,
+      "order": 5,
+      "flipX": false
+    },
+    {
+      "id": "stage-monitor-right",
+      "file": "board1-stage-monitor.png",
+      "x": 54.904306,
+      "y": 38.99545,
+      "w": 3.234719,
+      "anchor": "bottom-center",
+      "z": 40,
+      "order": 5,
+      "flipX": true
+    },
+    {
+      "id": "table-audio",
+      "file": "board1-table-audio.png",
+      "x": 38.397129,
+      "y": 94.958664,
+      "w": 11.357459,
+      "anchor": "bottom-center",
+      "z": 50,
+      "order": 6,
+      "flipX": false
+    },
+    {
+      "id": "table-video",
+      "file": "board1-table-video.png",
+      "x": 50.358852,
+      "y": 93.392511,
+      "w": 11.384182,
+      "anchor": "bottom-center",
+      "z": 50,
+      "order": 6,
+      "flipX": false
+    },
+    {
+      "id": "table-lighting",
+      "file": "board1-table-lighting.png",
+      "x": 62.380383,
+      "y": 94.380196,
+      "w": 11.384182,
+      "anchor": "bottom-center",
+      "z": 50,
+      "order": 6,
+      "flipX": false
+    },
+    {
+      "id": "camera-left",
+      "file": "board1-camera.png",
+      "x": 8.376337,
+      "y": 61.648184,
+      "w": 6.412609,
+      "anchor": "bottom-center",
+      "z": 60,
+      "order": 7,
+      "flipX": false
+    },
+    {
+      "id": "camera-right",
+      "file": "board1-camera.png",
+      "x": 92.042323,
+      "y": 61.648184,
+      "w": 6.412609,
+      "anchor": "bottom-center",
+      "z": 60,
+      "order": 7,
+      "flipX": true
+    }
+  ],
+  "plateAnchors": {
+    "stageFloor": [
+      [33.313397, 29.649309],
+      [66.208134, 29.649309],
+      [67.165072, 37.938363],
+      [32.416268, 38.044633]
+    ],
+    "techPlatformTop": [
+      [30.681818, 76.620616],
+      [70.095694, 75.876727],
+      [71.710526, 91.392136],
+      [29.246411, 91.498406]
+    ],
+    "cameraRiserLeft": [
+      [6.279904, 56.216791],
+      [11.423445, 56.110521],
+      [10.526316, 62.592986],
+      [5.023923, 62.699256]
+    ],
+    "cameraRiserRight": [
+      [88.755981, 56.323061],
+      [94.258373, 56.110521],
+      [95.155502, 62.380446],
+      [89.712919, 62.699256]
+    ]
+  }
+}
