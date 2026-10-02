@@ -1,6 +1,7 @@
 import { inquirySchema } from '@/lib/validation';
 import { contentRepository } from '@/services/content';
 import { saveInquiry } from '@/services/inquiries';
+import { notifyInquiry } from '@/lib/notify';
 export const runtime = 'nodejs';
 const buckets = new Map<
   string,
@@ -113,6 +114,7 @@ export async function POST(request: Request) {
   }
   try {
     const saved = await saveInquiry(data, snapshot);
+    if (saved.mode === 'live') await notifyInquiry(saved.id, data, snapshot);
     return response(saved, 201);
   } catch {
     return response(
