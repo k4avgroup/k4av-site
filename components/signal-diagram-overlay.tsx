@@ -28,7 +28,7 @@ export function SignalDiagramOverlay({ delay = 3.2 }: { delay?: number }) {
       const next: Leader[] = [];
       for (const label of data.labels) {
         const node = labelRefs.current[label.id];
-        if (!node || !('targetX' in label)) continue;
+        if (!node || label.targetX === undefined || label.targetY === undefined) continue;
         const r = node.getBoundingClientRect();
         if (!r.width) continue; // hidden at this size
         const left = r.left - box.left;

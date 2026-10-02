@@ -4737,3 +4737,345 @@ html {
     scroll-padding-top: calc(var(--header-h, 84px) + 48px);
   }
 }
+
+/* ============ Live Events scenes: a plate with sprites on it ============ */
+.sc {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.sc-plate {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  animation: sc-fade 0.45s ease var(--d, 0s) forwards;
+}
+.sc-plate img {
+  object-fit: cover;
+}
+.sc-sprite {
+  position: absolute;
+  aspect-ratio: 1;
+  pointer-events: none;
+}
+.sc-in,
+.sc-still {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.sc-in {
+  opacity: 0;
+  animation: sc-rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) var(--d, 0s) forwards;
+}
+.sc-sprite img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+@keyframes sc-fade {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes sc-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-plate,
+  .sc-in {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* Signal lines laid over the room sketch */
+.sig {
+  fill: none;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  opacity: 0;
+  animation: sig-draw 0.7s ease var(--d, 0s) forwards;
+}
+.sig-video {
+  stroke: #ff5a1f;
+}
+.sig-audio {
+  stroke: #1fa2ff;
+}
+.sig-lighting,
+.sig-wireless {
+  stroke-width: 4;
+}
+.sig-lighting {
+  stroke: #f2f2f2;
+}
+.sig-wireless {
+  stroke: #ff5a1f;
+}
+@keyframes sig-draw {
+  from {
+    opacity: 1;
+    stroke-dashoffset: 100;
+  }
+  to {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sig {
+    animation: none;
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* dashed signals fade in and keep marching; layers above the sprites */
+.sig-lighting,
+.sig-wireless {
+  stroke-dasharray: 2.2 1.6;
+  stroke-dashoffset: 0;
+  animation:
+    sig-fade 0.5s ease var(--d, 0s) forwards,
+    sig-march 1.4s linear var(--d, 0s) infinite;
+}
+@keyframes sig-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes sig-march {
+  to {
+    stroke-dashoffset: -3.8;
+  }
+}
+.sc .g-overlay {
+  z-index: 90;
+}
+.sc .sd-overlay {
+  z-index: 100;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sig-lighting,
+  .sig-wireless {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* Stage board: figures that walk, swap poses and lift */
+.sc-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  animation: sc-frame var(--period, 0.6s) steps(1, end)
+    calc(var(--d, 0s) + var(--i, 0) * var(--period, 0.6s) / var(--n, 2)) infinite;
+}
+@keyframes sc-frame {
+  0% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+.sc-walk {
+  animation: sc-walk var(--dur, 3s) linear var(--d, 0s) forwards;
+}
+.sc-walk > div {
+  animation:
+    sc-walk-in 0.01s linear var(--d, 0s) both,
+    sc-walk-out 0.3s ease calc(var(--d, 0s) + var(--dur, 3s)) forwards;
+  opacity: 0;
+}
+@keyframes sc-walk {
+  from {
+    left: var(--x0);
+    top: var(--y0);
+    width: var(--w0);
+  }
+  to {
+    left: var(--x1);
+    top: var(--y1);
+    width: var(--w1);
+  }
+}
+@keyframes sc-walk-in {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes sc-walk-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.sc-lift {
+  opacity: 0;
+  animation:
+    sc-fade 0.01s linear var(--d, 0s) forwards,
+    sc-lift var(--dur, 3s) steps(10, end) var(--d, 0s) forwards;
+}
+@keyframes sc-lift {
+  from {
+    top: var(--y0);
+  }
+  to {
+    top: var(--y1);
+  }
+}
+.st-lamp {
+  opacity: 0;
+  animation: st-blink 0.9s steps(1, end) var(--d, 0s) infinite;
+}
+.st-red {
+  --tone: #ff2a2a;
+}
+.st-blue {
+  --tone: #2a6bff;
+}
+.st-cone {
+  fill: var(--tone);
+  opacity: 0.2;
+}
+.st-bulb {
+  fill: var(--tone);
+}
+@keyframes st-blink {
+  0% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+.st-beam {
+  opacity: 0;
+  animation: sc-fade 0.5s ease var(--d, 0s) forwards;
+}
+.st-face {
+  position: absolute;
+  left: 44.6%;
+  top: 16.4%;
+  width: 10.65%;
+  height: 12.1%;
+  z-index: 13;
+  opacity: 0;
+  overflow: hidden;
+  animation: sc-fade 0.4s ease var(--d, 0s) forwards;
+}
+.st-pat {
+  object-fit: cover;
+  opacity: 0;
+  animation: st-pat 2.6s steps(1, end) var(--d, 0s) infinite;
+}
+.st-pat-2 {
+  animation-delay: calc(var(--d, 0s) + 1.3s);
+}
+@keyframes st-pat {
+  0% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-frame,
+  .st-lamp,
+  .st-pat {
+    animation: none;
+  }
+  .sc-frame:first-child {
+    opacity: 1;
+  }
+}
+
+/* Show board: slides on the screens and lights that change color slowly */
+.sh-screen {
+  position: absolute;
+  overflow: hidden;
+  z-index: 10;
+}
+.sh-slide {
+  object-fit: cover;
+  opacity: 0;
+  animation: sh-slide var(--cycle, 7.2s) ease var(--d, 0s) infinite;
+}
+@keyframes sh-slide {
+  0% {
+    opacity: 0;
+    transform: translateX(7%);
+  }
+  4% {
+    opacity: 1;
+    transform: none;
+  }
+  24% {
+    opacity: 1;
+    transform: none;
+  }
+  28%,
+  100% {
+    opacity: 0;
+    transform: translateX(-7%);
+  }
+}
+.sh-ray {
+  fill: #3d8bff;
+  opacity: 0;
+  mix-blend-mode: screen;
+  mask: url(#sh-mask);
+  animation: sh-hue 14s ease-in-out calc(var(--d, 0s) - 14s) infinite;
+}
+@keyframes sh-hue {
+  0%,
+  100% {
+    fill: #3d8bff;
+    opacity: 0.28;
+  }
+  25% {
+    fill: #ffb347;
+    opacity: 0.34;
+  }
+  50% {
+    fill: #ff4fa3;
+    opacity: 0.26;
+  }
+  75% {
+    fill: #35e0c2;
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sh-slide:first-child {
+    animation: none;
+    opacity: 1;
+  }
+  .sh-ray {
+    animation: none;
+    opacity: 0.25;
+  }
+}
