@@ -198,7 +198,7 @@ export function StageScene() {
       <Sprite src={st('tech-a')} x={51.5} y={86} w={14.1} anchor="bottom-center" z={51} delay={T.tech + 0.25} />
 
       {/* a cameraman at his camera */}
-      <Sprite src={st('cameraman-a')} x={85} y={72} w={12.1} anchor="bottom-center" z={44} delay={T.camera} />
+      <Sprite src={st('cameraman-a')} x={85} y={72} w={13.1} anchor="bottom-center" z={44} delay={T.camera} />
 
       {/* the projectionist checks the left screen */}
       <Sprite src={st('projector-worker')} x={33.5} y={49} w={14.2} anchor="bottom-center" z={46} delay={T.projector} />
