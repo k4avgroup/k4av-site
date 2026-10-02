@@ -1,4 +1,45 @@
 import { PageIntro } from '@/components/ui';
 import { pageMetadata } from '@/lib/metadata';
-export const metadata = { ...pageMetadata('Privacy Policy', 'Information about inquiry data used by the K4 AV Group website.', '/privacy'), robots: { index: false, follow: true } };
-export default function Privacy() { return <><PageIntro eyebrow="Website information" title="Privacy Policy" text="Draft for owner review before public launch."/><article className="container legal page-content"><div className="notice">This page describes the Phase 1 implementation. The business must confirm its contact details, retention period and final privacy policy before launch.</div><h2>Information you provide</h2><p>Inquiry forms collect the contact information and project or rental details you submit. We use those details to review and respond to your request. Please do not include sensitive personal information.</p><h2>How information is stored</h2><p>Development submissions are stored on the local development computer. A configured production deployment stores inquiries in the business’s Supabase database. Inquiry records are not publicly accessible through this website.</p><h2>Browser storage and services</h2><p>The rental list is saved in your browser so it remains available when you return on the same device. Remove its items to clear it. Analytics are not enabled. When configured, Cloudflare Turnstile processes browser and connection information to help prevent automated abuse.</p><h2>Requests about your information</h2><p>Use the contact form to ask about information you previously submitted or request deletion. Business contact details and a data retention period require confirmation before public launch.</p></article></>; }
+export const metadata = {
+  ...pageMetadata('Privacy Policy', 'Information about inquiry data used by the K4 AV Group website.', '/privacy'),
+  robots: { index: false, follow: true },
+};
+export default function Privacy() {
+  return (
+    <>
+      <PageIntro
+        eyebrow="Website information"
+        title="Privacy Policy"
+        text="Draft for owner review before public launch."
+      />
+      <article className="container legal page-content">
+        <div className="notice">
+          This page describes the Phase 1 implementation. The business must confirm its contact details, retention
+          period and final privacy policy before launch.
+        </div>
+        <h2>Information you provide</h2>
+        <p>
+          Inquiry forms collect the contact information and project or rental details you submit. We use those details
+          to review and respond to your request. Please do not include sensitive personal information.
+        </p>
+        <h2>How information is stored</h2>
+        <p>
+          Development submissions are stored on the local development computer. A configured production deployment
+          stores inquiries in the business’s Supabase database. Inquiry records are not publicly accessible through this
+          website.
+        </p>
+        <h2>Browser storage and services</h2>
+        <p>
+          The rental list is saved in your browser so it remains available when you return on the same device. Remove
+          its items to clear it. Analytics are not enabled. When configured, Cloudflare Turnstile processes browser and
+          connection information to help prevent automated abuse.
+        </p>
+        <h2>Requests about your information</h2>
+        <p>
+          Use the contact form to ask about information you previously submitted or request deletion. Business contact
+          details and a data retention period require confirmation before public launch.
+        </p>
+      </article>
+    </>
+  );
+}

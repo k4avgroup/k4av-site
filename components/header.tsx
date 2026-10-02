@@ -1,12 +1,61 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
-import { Menu, X, ArrowUpRight } from 'lucide-react';
-import { navigation } from '@/data/site';
+import { useEffect, useRef } from 'react';
+import { ArrowUpRight } from 'lucide-react';
+import { divisions, type Division } from '@/data/division';
 import { Logo } from './logo';
-export function Header() { const [open, setOpen] = useState(false); const pathname = usePathname(); const trigger = useRef<HTMLButtonElement>(null); useEffect(() => { if (!open)
-    return; function key(e: KeyboardEvent) { if (e.key === 'Escape') {
-    setOpen(false);
-    trigger.current?.focus();
-} } document.addEventListener('keydown', key); return () => document.removeEventListener('keydown', key); }, [open]); return <header className="header"><div className="header-inner"><Logo /><button ref={trigger} className="menu-toggle" aria-label={open ? 'Close navigation' : 'Open navigation'} aria-expanded={open} aria-controls="main-nav" onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button><nav id="main-nav" aria-label="Main navigation" className={open ? 'nav open' : 'nav'}>{navigation.map(label => <Link key={label} href={`/${label.toLowerCase()}`} aria-current={pathname.startsWith(`/${label.toLowerCase()}`) ? 'page' : undefined} onClick={() => setOpen(false)}>{label}</Link>)}<Link className="login-link" href="/login" onClick={() => setOpen(false)}>Client login</Link><Link className="button header-quote" href="/quote" onClick={() => setOpen(false)}>Request a quote<ArrowUpRight size={15}/></Link></nav></div></header>; }
+
+function currentDivision(pathname: string): Division | null {
+  if (pathname === '/integration' || pathname.startsWith('/integration/')) return 'integration';
+  if (pathname === '/events' || pathname.startsWith('/events/')) return 'events';
+  return null;
+}
+
+export function Header() {
+  const pathname = usePathname();
+  const active = currentDivision(pathname);
+  const cta = active ? divisions[active] : null;
+  const ref = useRef<HTMLElement>(null);
+
+  // The section navigation sticks right under the header, so publish the header height as a CSS variable.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const publish = () => document.documentElement.style.setProperty('--header-h', `${el.offsetHeight}px`);
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <header
+      ref={ref}
+      className={pathname === '/' ? 'site-header is-home' : 'site-header'}
+      data-division={active ?? undefined}
+    >
+      <div className="site-header-inner">
+        <Logo />
+        <nav className="divtabs" aria-label="Divisions">
+          {(Object.keys(divisions) as Division[]).map((key) => (
+            <Link
+              key={key}
+              href={divisions[key].href}
+              className={`divtab divtab-${key}`}
+              aria-current={active === key ? 'page' : undefined}
+            >
+              <span className="tab-full">{divisions[key].label}</span>
+              <span className="tab-short">{divisions[key].short}</span>
+            </Link>
+          ))}
+        </nav>
+        <Link className="button header-cta" href={cta ? cta.quote : '/quote'}>
+          <span className="cta-full">{cta ? cta.cta : 'Request a Quote'}</span>
+          <span className="cta-short">{cta ? cta.ctaShort : 'Quote'}</span>
+          <ArrowUpRight size={16} aria-hidden="true" />
+        </Link>
+      </div>
+    </header>
+  );
+}

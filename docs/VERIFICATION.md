@@ -17,22 +17,22 @@ Live Supabase, Turnstile and deployed-domain verification remain outside this vi
 
 Verified locally on September 23–24, 2026 using Node.js 24.19.0.
 
-| Check | Result |
-| --- | --- |
-| TypeScript (`pnpm typecheck`) | Passed |
-| ESLint (`pnpm lint`) | Passed with no errors or warnings |
-| Unit tests (`pnpm test`) | 8 passed |
-| Production build (`pnpm build`) | Passed; 27 generated pages |
-| Route and asset HTTP checks | 26 returned 200 |
-| Protected / unknown routes | `/admin`, unknown page/project and disabled service returned 404 |
-| Local inquiry API | Contact, quote and shop records persisted and read back from disk |
-| Browser rental flow | Add multiple items, edit quantity, remove item, reload persistence, reject reversed dates, save and clear basket |
-| Browser quote flow | Reject phone preference without phone, accept corrected form, show local-save reference |
-| Browser navigation | Mobile menu opens, navigates, closes and responds to Escape |
-| Responsive checks | 320, 390, 768 and desktop 1280+ widths; no horizontal overflow in checked views |
-| Images | Hero and project assets load; no broken homepage images |
-| Production startup | Public pages respond; unconfigured inquiry endpoint returns 503 rather than claiming success |
-| Source hygiene | No live credentials; local inquiry data, environment files, dependencies and build output excluded from source archive/Git |
+| Check                           | Result                                                                                                                     |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| TypeScript (`pnpm typecheck`)   | Passed                                                                                                                     |
+| ESLint (`pnpm lint`)            | Passed with no errors or warnings                                                                                          |
+| Unit tests (`pnpm test`)        | 8 passed                                                                                                                   |
+| Production build (`pnpm build`) | Passed; 27 generated pages                                                                                                 |
+| Route and asset HTTP checks     | 26 returned 200                                                                                                            |
+| Protected / unknown routes      | `/admin`, unknown page/project and disabled service returned 404                                                           |
+| Local inquiry API               | Contact, quote and shop records persisted and read back from disk                                                          |
+| Browser rental flow             | Add multiple items, edit quantity, remove item, reload persistence, reject reversed dates, save and clear basket           |
+| Browser quote flow              | Reject phone preference without phone, accept corrected form, show local-save reference                                    |
+| Browser navigation              | Mobile menu opens, navigates, closes and responds to Escape                                                                |
+| Responsive checks               | 320, 390, 768 and desktop 1280+ widths; no horizontal overflow in checked views                                            |
+| Images                          | Hero and project assets load; no broken homepage images                                                                    |
+| Production startup              | Public pages respond; unconfigured inquiry endpoint returns 503 rather than claiming success                               |
+| Source hygiene                  | No live credentials; local inquiry data, environment files, dependencies and build output excluded from source archive/Git |
 
 Tests cover valid requests, missing quote fields, invalid email, required phone preference, same-day rentals, reversed and impossible dates, duplicate/fractional rental quantities, restored basket normalization, and the Seattle date at UTC midnight. API checks also cover honeypot and origin rejection, unknown equipment, and sold shop items.
 

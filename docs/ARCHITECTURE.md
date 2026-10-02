@@ -20,18 +20,18 @@ Turnstile and Supabase must both be configured for live production requests. Pro
 
 Use migrations to add normalized tables when their workflows are implemented:
 
-| Entity | Intended relationships / boundaries |
-| --- | --- |
-| profiles / users | `auth.users.id`; server-assigned roles, never client-editable |
-| clients | Client organization and profile membership |
-| jobs | Client, assigned staff, status, project documents |
-| services / portfolio_projects | Public approved content; private editing restricted to admins |
-| equipment_categories / equipment | Public catalog separate from private serial numbers, cost, maintenance and storage location |
-| rental_requests / rental_lines | Client or inquiry, equipment, dates, quantities; later transactional availability checks |
-| quote_requests / quotes / quote_lines | Inquiry-to-quote workflow, revisions and approvals |
-| invoices / invoice_lines | Client, job or rental, integer minor currency amounts |
-| documents | Private storage bucket, scoped signed URLs and membership checks |
-| shop_items / orders | Condition, quantity, price and later payment provider references |
+| Entity                                | Intended relationships / boundaries                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------------------- |
+| profiles / users                      | `auth.users.id`; server-assigned roles, never client-editable                               |
+| clients                               | Client organization and profile membership                                                  |
+| jobs                                  | Client, assigned staff, status, project documents                                           |
+| services / portfolio_projects         | Public approved content; private editing restricted to admins                               |
+| equipment_categories / equipment      | Public catalog separate from private serial numbers, cost, maintenance and storage location |
+| rental_requests / rental_lines        | Client or inquiry, equipment, dates, quantities; later transactional availability checks    |
+| quote_requests / quotes / quote_lines | Inquiry-to-quote workflow, revisions and approvals                                          |
+| invoices / invoice_lines              | Client, job or rental, integer minor currency amounts                                       |
+| documents                             | Private storage bucket, scoped signed URLs and membership checks                            |
+| shop_items / orders                   | Condition, quantity, price and later payment provider references                            |
 
 `types/domain.ts` provides current contracts and lightweight future client, job and invoice types. Avoid adding empty tables or speculative business logic now. When migrating inquiry JSON into normalized tables, preserve original IDs and audit data.
 
