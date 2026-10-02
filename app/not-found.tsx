@@ -1,2 +1,18 @@
 import { Button, PageIntro } from '@/components/ui';
-export default function NotFound() { return <><PageIntro eyebrow="404 / Page not found" title="This signal doesn’t lead anywhere." text="The page may have moved, or the address may be incorrect."/><div className="container page-content button-row"><Button href="/">Back to home</Button><Button href="/contact" secondary>Contact us</Button></div></>; }
+export default function NotFound() {
+  return (
+    <>
+      <PageIntro
+        eyebrow="404 / Page not found"
+        title="This signal doesn’t lead anywhere."
+        text="The page may have moved, or the address may be incorrect."
+      />
+      <div className="container page-content button-row">
+        <Button href="/">Back to home</Button>
+        <Button href="/contact" secondary>
+          Contact us
+        </Button>
+      </div>
+    </>
+  );
+}

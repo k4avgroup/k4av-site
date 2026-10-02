@@ -1,4 +1,51 @@
 import Link from 'next/link';
-import { navigation, site } from '@/data/site';
+import { navigation, site, features } from '@/data/site';
 import { Logo } from './logo';
-export function Footer() { return <footer className="footer"><div className="container footer-main"><div><Logo /><p>Technical expertise.<br />From system design intent to show time.</p><span className="muted">{site.area}<br />Travel available for projects.</span></div><div><span className="eyebrow">Explore</span><div className="footer-links">{navigation.map(x => <Link key={x} href={`/${x.toLowerCase()}`}>{x}</Link>)}</div></div><div><span className="eyebrow">Start a conversation</span><Link className="text-link" href="/quote">Request a quote ↗</Link><Link href="/contact">Contact us</Link><Link href="/login">Client login</Link></div></div><div className="container footer-bottom"><span>© {new Date().getFullYear()} K4 AV Group</span><span><Link href="/privacy">Privacy Policy</Link><Link href="/terms">Terms</Link></span><span>Engineered for the real world.</span></div></footer>; }
+
+export function Footer() {
+  return (
+    <footer className="footer">
+      <div className="container footer-main">
+        <div>
+          <Logo />
+          <p>
+            Technical expertise.
+            <br />
+            From system design intent to show time.
+          </p>
+          <span className="muted">
+            {site.area}
+            <br />
+            Travel available for projects.
+          </span>
+        </div>
+        <div>
+          <span className="eyebrow">Explore</span>
+          <div className="footer-links">
+            {navigation.map(({ label, href }) => (
+              <Link key={href} href={href}>
+                {label}
+              </Link>
+            ))}
+          </div>
+        </div>
+        <div>
+          <span className="eyebrow">Start a conversation</span>
+          <Link className="text-link" href="/quote">
+            Request a Quote ↗
+          </Link>
+          <Link href="/integration/contact">Contact us</Link>
+          {features.clientLogin && <Link href="/login">Client login</Link>}
+        </div>
+      </div>
+      <div className="container footer-bottom">
+        <span>© {new Date().getFullYear()} K4 AV Group</span>
+        <span>
+          <Link href="/privacy">Privacy Policy</Link>
+          <Link href="/terms">Terms</Link>
+        </span>
+        <span>Engineered for the real world.</span>
+      </div>
+    </footer>
+  );
+}
