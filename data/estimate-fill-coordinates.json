@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "referenceImage": { "width": 1672, "height": 941, "aspectRatio": "16:9" },
+  "equipment": [
+    {
+      "id": "lighting-console",
+      "item": "Lighting Console",
+      "qty": "1",
+      "price": "$250",
+      "qtyPosition": { "x": 56.3, "y": 31.8 },
+      "pricePosition": { "x": 82.2, "y": 31.8 }
+    },
+    {
+      "id": "mixing-board",
+      "item": "Mixing Board",
+      "qty": "1",
+      "price": "$350",
+      "qtyPosition": { "x": 56.3, "y": 38.6 },
+      "pricePosition": { "x": 82.2, "y": 38.6 }
+    },
+    {
+      "id": "speakers",
+      "item": "Speakers",
+      "qty": "16",
+      "price": "$800",
+      "qtyPosition": { "x": 56.3, "y": 45.5 },
+      "pricePosition": { "x": 82.2, "y": 45.5 }
+    },
+    {
+      "id": "microphones",
+      "item": "Microphones",
+      "qty": "4",
+      "price": "$180",
+      "qtyPosition": { "x": 56.3, "y": 52.3 },
+      "pricePosition": { "x": 82.2, "y": 52.3 }
+    },
+    {
+      "id": "cameras",
+      "item": "Cameras",
+      "qty": "2",
+      "price": "$400",
+      "qtyPosition": { "x": 56.3, "y": 59.0 },
+      "pricePosition": { "x": 82.2, "y": 59.0 }
+    }
+  ],
+  "labor": [
+    {
+      "id": "a1",
+      "role": "A1",
+      "qty": "1",
+      "price": "$650",
+      "qtyPosition": { "x": 20.1, "y": 74.9 },
+      "pricePosition": { "x": 29.6, "y": 74.9 }
+    },
+    {
+      "id": "l1",
+      "role": "L1",
+      "qty": "1",
+      "price": "$600",
+      "qtyPosition": { "x": 20.1, "y": 80.7 },
+      "pricePosition": { "x": 29.6, "y": 80.7 }
+    },
+    {
+      "id": "v1",
+      "role": "V1",
+      "qty": "1",
+      "price": "$600",
+      "qtyPosition": { "x": 20.1, "y": 86.4 },
+      "pricePosition": { "x": 29.6, "y": 86.4 }
+    },
+    {
+      "id": "v2",
+      "role": "V2",
+      "qty": "1",
+      "price": "$450",
+      "qtyPosition": { "x": 20.1, "y": 92.1 },
+      "pricePosition": { "x": 29.6, "y": 92.1 }
+    }
+  ],
+  "services": [
+    { "id": "delivery", "service": "Delivery", "price": "$150", "pricePosition": { "x": 59.4, "y": 74.9 } },
+    { "id": "set", "service": "Set", "price": "$300", "pricePosition": { "x": 59.4, "y": 80.7 } },
+    { "id": "strike", "service": "Strike", "price": "$300", "pricePosition": { "x": 59.4, "y": 86.4 } },
+    { "id": "operations", "service": "Operations", "price": "$450", "pricePosition": { "x": 59.4, "y": 92.1 } }
+  ],
+  "approval": {
+    "checkbox": { "x": 70.5, "y": 78.0, "value": true },
+    "signature": { "x": 87.5, "y": 85.4, "value": "signature" },
+    "date": { "x": 86.0, "y": 91.4, "value": "04/12/2026" }
+  },
+  "animation": {
+    "initialDelayMs": 300,
+    "equipmentQtyDelayMs": 110,
+    "equipmentPriceDelayMs": 100,
+    "laborDelayMs": 110,
+    "servicesDelayMs": 120,
+    "approvalPauseMs": 500,
+    "checkmarkDurationMs": 280,
+    "signatureDurationMs": 650
+  }
+}
