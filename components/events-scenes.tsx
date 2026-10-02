@@ -111,7 +111,7 @@ const st = (name: string) => `${STAGE}/${name}.webp`;
 const T = {
   cases: 0.5,
   push: 0.8,
-  arrive: 4.4,
+  arrive: 3.6,
   watch: 1.3,
   lift: 1.7,
   liftEnd: 4.7,
@@ -151,21 +151,21 @@ export function StageScene() {
       <Sprite src={st('case-closed')} x={64} y={60} w={9} anchor="bottom-center" z={30} delay={T.cases} />
       <Sprite src={st('case-open')} x={73} y={63} w={9.4} anchor="bottom-center" z={31} delay={T.cases + 0.25} />
 
-      {/* one worker rolls a case in along the front of the tech platform; the parked case is already under him and stays when he is gone */}
+      {/* one worker rolls a case a short way across the middle of the room; the parked case is already under him and stays when he is gone */}
       <Sprite
-        x={52}
-        y={98}
+        x={53.5}
+        y={71.5}
         w={14.2}
         anchor="bottom-center"
-        z={40}
+        z={45}
         enter="none"
         className="sc-walk"
         style={
           {
-            '--x0': '52%',
-            '--y0': '98%',
-            '--x1': '20%',
-            '--y1': '80%',
+            '--x0': '53.5%',
+            '--y0': '71.5%',
+            '--x1': '50%',
+            '--y1': '66%',
             '--w0': '14.2%',
             '--w1': '13.8%',
             '--dur': `${T.arrive - T.push}s`,
@@ -173,25 +173,25 @@ export function StageScene() {
           } as CSSProperties
         }
       >
-        <WalkFrames a={st('pusher-a')} b={st('pusher-b')} period={0.6} cycles={6} delay={T.push} />
+        <WalkFrames a={st('pusher-a')} b={st('pusher-b')} period={0.7} cycles={4} delay={T.push} />
       </Sprite>
 
       {/* the same case, parked where the man leaves it: it takes over from under him, so it never blinks out */}
       <Sprite
         src={st('case-closed')}
-        x={17.7}
-        y={78.6}
+        x={47.7}
+        y={64.65}
         w={9.2}
         anchor="bottom-center"
-        z={39}
+        z={44}
         enter="none"
         className="sc-park-in"
         delay={T.arrive - 0.2}
       />
 
       {/* two workers watch the truss go up, close to the stage */}
-      <Sprite src={st('stand-a')} x={43} y={50} w={11.4} anchor="bottom-center" z={42} delay={T.watch} />
-      <Sprite src={st('watch-a')} x={55} y={51} w={11.3} anchor="bottom-center" z={43} delay={T.watch + 0.2} />
+      <Sprite src={st('stand-a')} x={40} y={50} w={11.4} anchor="bottom-center" z={42} delay={T.watch} />
+      <Sprite src={st('watch-a')} x={60} y={51} w={11.3} anchor="bottom-center" z={43} delay={T.watch + 0.2} />
 
       {/* sound and lighting at the consoles on the tech platform */}
       <Sprite src={st('tech-b')} x={38} y={86} w={15.5} anchor="bottom-center" z={50} delay={T.tech} />
