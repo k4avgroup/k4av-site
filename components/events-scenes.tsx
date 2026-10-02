@@ -148,15 +148,15 @@ export function StageScene() {
       />
 
       {/* the road cases */}
-      <Sprite src={st('case-closed')} x={64} y={60} w={7.8} anchor="bottom-center" z={30} delay={T.cases} />
-      <Sprite src={st('case-open')} x={73} y={63} w={8.2} anchor="bottom-center" z={31} delay={T.cases + 0.25} />
-      <Sprite src={st('case-closed')} x={28} y={60} w={7.4} anchor="bottom-center" z={30} delay={T.arrive} />
+      <Sprite src={st('case-closed')} x={64} y={60} w={9} anchor="bottom-center" z={30} delay={T.cases} />
+      <Sprite src={st('case-open')} x={73} y={63} w={9.4} anchor="bottom-center" z={31} delay={T.cases + 0.25} />
+      <Sprite src={st('case-closed')} x={25.7} y={57.5} w={9} anchor="bottom-center" z={30} delay={T.arrive} />
 
       {/* one worker rolls a case in from the front and parks it on the left, clear of everyone else */}
       <Sprite
         x={42}
         y={76}
-        w={9.6}
+        w={14.2}
         anchor="bottom-center"
         z={40}
         enter="none"
@@ -167,8 +167,8 @@ export function StageScene() {
             '--y0': '76%',
             '--x1': '28%',
             '--y1': '60%',
-            '--w0': '9.6%',
-            '--w1': '7.9%',
+            '--w0': '14.2%',
+            '--w1': '13.8%',
             '--dur': `${T.arrive - T.push}s`,
             '--d': `${T.push}s`,
           } as CSSProperties
@@ -178,18 +178,18 @@ export function StageScene() {
       </Sprite>
 
       {/* two workers watch the truss go up, close to the stage */}
-      <Sprite src={st('stand-a')} x={43} y={50} w={10.5} anchor="bottom-center" z={42} delay={T.watch} />
-      <Sprite src={st('watch-a')} x={55} y={51} w={10.6} anchor="bottom-center" z={43} delay={T.watch + 0.2} />
+      <Sprite src={st('stand-a')} x={43} y={50} w={11.4} anchor="bottom-center" z={42} delay={T.watch} />
+      <Sprite src={st('watch-a')} x={55} y={51} w={11.3} anchor="bottom-center" z={43} delay={T.watch + 0.2} />
 
       {/* sound and lighting at the consoles on the tech platform */}
       <Sprite src={st('tech-b')} x={38} y={86} w={13} anchor="bottom-center" z={50} delay={T.tech} />
-      <Sprite src={st('tech-a')} x={51} y={86} w={13} anchor="bottom-center" z={51} delay={T.tech + 0.25} />
+      <Sprite src={st('tech-a')} x={51} y={86} w={11.8} anchor="bottom-center" z={51} delay={T.tech + 0.25} />
 
       {/* a cameraman at his camera */}
-      <Sprite src={st('cameraman-a')} x={85} y={72} w={11} anchor="bottom-center" z={44} delay={T.camera} />
+      <Sprite src={st('cameraman-a')} x={85} y={72} w={12.1} anchor="bottom-center" z={44} delay={T.camera} />
 
       {/* the projectionist checks the left screen */}
-      <Sprite src={st('projector-worker')} x={27} y={46.5} w={9} anchor="bottom-center" z={46} delay={T.projector} />
+      <Sprite src={st('projector-worker')} x={24} y={47} w={14.2} anchor="bottom-center" z={46} delay={T.projector} />
 
       <svg className="g-overlay" viewBox="0 0 1672 941" aria-hidden="true" focusable="false" style={{ zIndex: 60 }}>
         <defs>
@@ -217,7 +217,7 @@ export function StageScene() {
         ))}
         {/* the projector beam, from the projector to the left screen on the wall */}
         <polygon
-          points="444,309 295,195 295,88 500,88 500,195"
+          points="390,246 295,195 295,88 500,88 500,195"
           fill="url(#st-beam)"
           className="st-beam"
           style={w(T.beam)}
