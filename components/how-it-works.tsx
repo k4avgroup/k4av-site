@@ -380,7 +380,29 @@ function HowDesktop({ division, id, c }: { division: Division; id?: string; c: C
   const stage = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const [run, setRun] = useState(0);
+  const [stageTop, setStageTop] = useState<number | undefined>();
   const total = c.steps.length + (c.done ? 1 : 0);
+
+  // Keep the drawing in the middle of what is visible under the sticky header and section navigation.
+  useEffect(() => {
+    const el = stage.current;
+    if (!el) return;
+    const place = () => {
+      const header = parseFloat(document.documentElement.style.getPropertyValue('--header-h')) || 0;
+      const nav = document.querySelector<HTMLElement>('.secondary-nav')?.offsetHeight ?? 0;
+      const covered = header + nav;
+      setStageTop(Math.max(covered + 12, (covered + window.innerHeight) / 2 - el.offsetHeight / 2));
+    };
+    const first = setTimeout(place, 0);
+    const observer = new ResizeObserver(place);
+    observer.observe(el);
+    window.addEventListener('resize', place);
+    return () => {
+      clearTimeout(first);
+      observer.disconnect();
+      window.removeEventListener('resize', place);
+    };
+  }, []);
 
   // Draw only while the sketch is on screen, and draw it again every time the visitor comes back to it.
   useEffect(() => {
@@ -448,7 +470,7 @@ function HowDesktop({ division, id, c }: { division: Division; id?: string; c: C
           )}
         </div>
 
-        <div className="how-stage" ref={stage}>
+        <div className="how-stage" ref={stage} style={stageTop === undefined ? undefined : { top: stageTop }}>
           <StageCard c={c} active={active} visible={visible} run={run} />
           <div className="how-progress" aria-hidden="true">
             {Array.from({ length: total }).map((_, i) => (

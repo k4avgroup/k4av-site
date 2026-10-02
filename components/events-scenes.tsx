@@ -1,7 +1,7 @@
 import layout from '@/data/sketch-layout.json';
 import type { CSSProperties } from 'react';
 import Image from 'next/image';
-import { Frames, Plate, Sprite, type Anchor } from './scene';
+import { Frames, Plate, Sprite, WalkFrames, type Anchor } from './scene';
 import { SignalDiagramOverlay } from './signal-diagram-overlay';
 
 // Board 1 and 2: the room sketch. Board 1 builds it step by step; board 2 shows it at once under the signal lines.
@@ -150,12 +150,11 @@ export function StageScene() {
       {/* the road cases */}
       <Sprite src={st('case-closed')} x={64} y={60} w={9} anchor="bottom-center" z={30} delay={T.cases} />
       <Sprite src={st('case-open')} x={73} y={63} w={9.4} anchor="bottom-center" z={31} delay={T.cases + 0.25} />
-      <Sprite src={st('case-closed')} x={25.7} y={57.5} w={9} anchor="bottom-center" z={30} delay={T.arrive} />
 
-      {/* one worker rolls a case in from the front and parks it on the left, clear of everyone else */}
+      {/* one worker rolls a case in along the front of the tech platform; the parked case is already under him and stays when he is gone */}
       <Sprite
-        x={42}
-        y={76}
+        x={52}
+        y={98}
         w={14.2}
         anchor="bottom-center"
         z={40}
@@ -163,10 +162,10 @@ export function StageScene() {
         className="sc-walk"
         style={
           {
-            '--x0': '42%',
-            '--y0': '76%',
-            '--x1': '28%',
-            '--y1': '60%',
+            '--x0': '52%',
+            '--y0': '98%',
+            '--x1': '20%',
+            '--y1': '80%',
             '--w0': '14.2%',
             '--w1': '13.8%',
             '--dur': `${T.arrive - T.push}s`,
@@ -174,22 +173,35 @@ export function StageScene() {
           } as CSSProperties
         }
       >
-        <Frames srcs={[st('pusher-a'), st('pusher-b')]} period={0.7} delay={T.push} />
+        <WalkFrames a={st('pusher-a')} b={st('pusher-b')} period={0.6} cycles={6} delay={T.push} />
       </Sprite>
+
+      {/* the same case, parked where the man leaves it: it takes over from under him, so it never blinks out */}
+      <Sprite
+        src={st('case-closed')}
+        x={17.7}
+        y={78.6}
+        w={9.2}
+        anchor="bottom-center"
+        z={39}
+        enter="none"
+        className="sc-park-in"
+        delay={T.arrive - 0.2}
+      />
 
       {/* two workers watch the truss go up, close to the stage */}
       <Sprite src={st('stand-a')} x={43} y={50} w={11.4} anchor="bottom-center" z={42} delay={T.watch} />
       <Sprite src={st('watch-a')} x={55} y={51} w={11.3} anchor="bottom-center" z={43} delay={T.watch + 0.2} />
 
       {/* sound and lighting at the consoles on the tech platform */}
-      <Sprite src={st('tech-b')} x={38} y={86} w={13} anchor="bottom-center" z={50} delay={T.tech} />
-      <Sprite src={st('tech-a')} x={51} y={86} w={11.8} anchor="bottom-center" z={51} delay={T.tech + 0.25} />
+      <Sprite src={st('tech-b')} x={38} y={86} w={15.5} anchor="bottom-center" z={50} delay={T.tech} />
+      <Sprite src={st('tech-a')} x={51.5} y={86} w={14.1} anchor="bottom-center" z={51} delay={T.tech + 0.25} />
 
       {/* a cameraman at his camera */}
       <Sprite src={st('cameraman-a')} x={85} y={72} w={12.1} anchor="bottom-center" z={44} delay={T.camera} />
 
       {/* the projectionist checks the left screen */}
-      <Sprite src={st('projector-worker')} x={24} y={47} w={14.2} anchor="bottom-center" z={46} delay={T.projector} />
+      <Sprite src={st('projector-worker')} x={33.5} y={49} w={14.2} anchor="bottom-center" z={46} delay={T.projector} />
 
       <svg className="g-overlay" viewBox="0 0 1672 941" aria-hidden="true" focusable="false" style={{ zIndex: 60 }}>
         <defs>
@@ -216,12 +228,7 @@ export function StageScene() {
           </g>
         ))}
         {/* the projector beam, from the projector to the left screen on the wall */}
-        <polygon
-          points="390,246 295,195 295,88 500,88 500,195"
-          fill="url(#st-beam)"
-          className="st-beam"
-          style={w(T.beam)}
-        />
+        <polygon points="549,265 295,195 295,88 500,88" fill="url(#st-beam)" className="st-beam" style={w(T.beam)} />
       </svg>
 
       <div className="st-face" style={w(T.beam)}>
