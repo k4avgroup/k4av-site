@@ -45,9 +45,15 @@ docs/                Architecture, launch checklist and verification
 
 ## Routes
 
-`/`, `/services`, `/services/[slug]`, `/projects`, `/projects/[slug]`, `/industries`, `/rental`, `/shop`, `/about`, `/contact`, `/quote`, `/login`, `/privacy`, `/terms`.
+The site is one company with two divisions shown as tabs in the header: **AV Integration** (light theme, `/integration`) and **Live Events** (dark theme with orange accents, `/events`). Each division has its own second navigation row (`secondaryNav` in `data/division.ts`) and its own theme, set by `data-division` on the wrapper in `app/integration/layout.tsx` and `app/events/layout.tsx` (CSS variables at the end of `app/globals.css`). The header and footer stay dark in both.
 
-`/api/inquiries` accepts validated contact, quote, rental and shop requests. `/admin` returns 404 until authenticated administration exists. Sitemap and robots endpoints are generated automatically. Login is a professionally styled coming-soon page, not an authentication form.
+Public: `/` (choose a division), `/integration`, `/events`, `/events/rentals`, `/about`, `/contact`, `/quote`, `/privacy`, `/terms`. `/quote?division=integration|events` shows the matching form. Division content (spaces, services, steps, event types) lives in `data/division.ts`; photos in `data/photos.ts` (files in `public/images/site/`). Old `/commercial-av`, `/live-events`, `/rental`, `/services`, `/industries` and `/projects` addresses redirect (see `next.config.ts`).
+
+Hidden, not deleted: `/shop`, `/login`, `/projects/[slug]` (sample projects) and `/services/[slug]` still exist but are not linked, are left out of the sitemap and are marked `noindex`. The `features` flags in `data/site.ts` control the sitemap and footer link; to bring a section back also add it to `navigation` and remove `robots: { index: false }` from its page. Unused home-page sections (projects, testimonials, layer entries, industries) remain in `components/sections.tsx`.
+
+`/api/inquiries` accepts validated quote, contact, rental and shop requests. The quote form (Commercial AV, Live Event, Equipment Rental, Technical Labor, Other) is the main conversion path. `/admin` returns 404 until authenticated administration exists.
+
+Placeholders to confirm before launch are marked `TODO(owner)` in `data/site.ts` (years of experience, contact email and phone, rental equipment in `data/catalog.ts`).
 
 ## Visual design system
 
@@ -71,7 +77,7 @@ To add a shop item, provide its stable ID, manufacturer/model, description, cond
 
 ## Replace the logo
 
-Edit `components/logo.tsx`. Replace the temporary text monogram with a supplied SVG or a Next.js `Image`, keeping the accessible home link. Put the asset in `public/` and preserve explicit image dimensions. Update `public/favicon.svg` separately.
+Edit `components/logo.tsx`. Replace the temporary text monogram with a supplied SVG or a Next.js `Image`, keeping the accessible home link. Put the asset in `public/` and preserve explicit image dimensions. Update `app/icon.png`, `app/apple-icon.png`, `app/favicon.ico` (the K4 mark) and `app/opengraph-image.png` (link preview) separately.
 
 ## Replace hero imagery or add video
 
@@ -93,14 +99,14 @@ Put an optimized, muted H.264 MP4 in `public/video/` and set `site.hero.video` t
 
 The service role key must never use a `NEXT_PUBLIC_` prefix. Row-level security denies direct public reads and writes. Requests go through the server API. The table stores kind, status, validated payload and a server-generated equipment/item snapshot. Until an admin dashboard exists, the owner reviews submissions in Supabase. **Email notifications are not implemented.**
 
-| Variable | Requirement |
-| --- | --- |
-| `NEXT_PUBLIC_SITE_URL` | Required for real deployment SEO and origin validation; defaults to local development |
-| `INQUIRY_STORAGE` | Local by default in development; use `supabase` in production |
-| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Required for live database submissions |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Required for public production submissions; optional locally |
-| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Reserved for Phase 2 client Auth; unused in Phase 1 |
-| `EMAIL_API_KEY`, `ANALYTICS_DOMAIN` | Reserved placeholders; no email or analytics integration is active |
+| Variable                                                    | Requirement                                                                           |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SITE_URL`                                      | Required for real deployment SEO and origin validation; defaults to local development |
+| `INQUIRY_STORAGE`                                           | Local by default in development; use `supabase` in production                         |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`                 | Required for live database submissions                                                |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`    | Required for public production submissions; optional locally                          |
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Reserved for Phase 2 client Auth; unused in Phase 1                                   |
+| `EMAIL_API_KEY`, `ANALYTICS_DOMAIN`                         | Reserved placeholders; no email or analytics integration is active                    |
 
 Production intentionally returns a clear error if backend configuration is incomplete. It never silently accepts a request into temporary serverless storage.
 
