@@ -148,15 +148,15 @@ export function StageScene() {
       />
 
       {/* the road cases */}
-      <Sprite src={st('case-closed')} x={64} y={60} w={9.5} anchor="bottom-center" z={30} delay={T.cases} />
-      <Sprite src={st('case-open')} x={73} y={63} w={10} anchor="bottom-center" z={31} delay={T.cases + 0.25} />
-      <Sprite src={st('case-closed')} x={28} y={60} w={9} anchor="bottom-center" z={30} delay={T.arrive} />
+      <Sprite src={st('case-closed')} x={64} y={60} w={7.8} anchor="bottom-center" z={30} delay={T.cases} />
+      <Sprite src={st('case-open')} x={73} y={63} w={8.2} anchor="bottom-center" z={31} delay={T.cases + 0.25} />
+      <Sprite src={st('case-closed')} x={28} y={60} w={7.4} anchor="bottom-center" z={30} delay={T.arrive} />
 
       {/* one worker rolls a case in from the front and parks it on the left, clear of everyone else */}
       <Sprite
         x={42}
         y={76}
-        w={11.5}
+        w={9.6}
         anchor="bottom-center"
         z={40}
         enter="none"
@@ -167,8 +167,8 @@ export function StageScene() {
             '--y0': '76%',
             '--x1': '28%',
             '--y1': '60%',
-            '--w0': '11.5%',
-            '--w1': '9.5%',
+            '--w0': '9.6%',
+            '--w1': '7.9%',
             '--dur': `${T.arrive - T.push}s`,
             '--d': `${T.push}s`,
           } as CSSProperties
@@ -178,8 +178,8 @@ export function StageScene() {
       </Sprite>
 
       {/* two workers watch the truss go up, close to the stage */}
-      <Sprite src={st('stand-a')} x={43} y={50} w={6.5} anchor="bottom-center" z={42} delay={T.watch} />
-      <Sprite src={st('watch-a')} x={55} y={51} w={6.6} anchor="bottom-center" z={43} delay={T.watch + 0.2} />
+      <Sprite src={st('stand-a')} x={43} y={50} w={10.5} anchor="bottom-center" z={42} delay={T.watch} />
+      <Sprite src={st('watch-a')} x={55} y={51} w={10.6} anchor="bottom-center" z={43} delay={T.watch + 0.2} />
 
       {/* sound and lighting at the consoles on the tech platform */}
       <Sprite src={st('tech-b')} x={38} y={86} w={13} anchor="bottom-center" z={50} delay={T.tech} />
@@ -189,7 +189,7 @@ export function StageScene() {
       <Sprite src={st('cameraman-a')} x={85} y={72} w={11} anchor="bottom-center" z={44} delay={T.camera} />
 
       {/* the projectionist checks the left screen */}
-      <Sprite src={st('projector-worker')} x={21} y={73} w={11.5} anchor="bottom-center" z={46} delay={T.projector} />
+      <Sprite src={st('projector-worker')} x={27} y={46.5} w={9} anchor="bottom-center" z={46} delay={T.projector} />
 
       <svg className="g-overlay" viewBox="0 0 1672 941" aria-hidden="true" focusable="false" style={{ zIndex: 60 }}>
         <defs>
@@ -216,7 +216,12 @@ export function StageScene() {
           </g>
         ))}
         {/* the projector beam, from the projector to the left screen on the wall */}
-        <polygon points="342,520 295,88 500,88 500,195" fill="url(#st-beam)" className="st-beam" style={w(T.beam)} />
+        <polygon
+          points="444,309 295,195 295,88 500,88 500,195"
+          fill="url(#st-beam)"
+          className="st-beam"
+          style={w(T.beam)}
+        />
       </svg>
 
       <div className="st-face" style={w(T.beam)}>
@@ -247,33 +252,69 @@ const SHOW_LIGHTS = [
   { x: 1127, tx: 1090, d: 3.5 },
   { x: 1283, tx: 1250, d: 4.9 },
 ];
+// the video operator's monitors show the same slides as the big screens (the fourth one is hidden behind his head)
+const MONITORS: { x: number; y: number; w: number; h: number; phase: number }[] = [
+  { x: 652, y: 621, w: 78, h: 80, phase: 1 },
+  { x: 733, y: 621, w: 76, h: 80, phase: 3 },
+  { x: 927, y: 621, w: 104, h: 78, phase: 2 },
+];
+// the camera operator's two small monitors: a close-up of the speaker, and the center screen
+const CAM_SPEAKER = { x: 1475, y: 652, w: 60, h: 66 };
+const CAM_SCREEN = { x: 1540, y: 655, w: 84, h: 76, phase: 0 };
+const PRESENTER = ['presenter-a', 'presenter-b', 'presenter-c', 'presenter-d'].map(sh);
 const pc = (n: number, total: number) => `${(n / total) * 100}%`;
+const rect = (r: { x: number; y: number; w: number; h: number }): CSSProperties => ({
+  left: pc(r.x, 1672),
+  top: pc(r.y, 941),
+  width: pc(r.w, 1672),
+  height: pc(r.h, 941),
+});
+const SLIDES = [1, 2, 3, 4];
+
+function Slides({ phase }: { phase: number }) {
+  return (
+    <>
+      {SLIDES.map((n, i) => (
+        <Image
+          key={n}
+          src={sh(`slide-${n}`)}
+          alt=""
+          fill
+          unoptimized
+          className="sh-slide"
+          style={{ '--d': `${0.5 + ((i + phase) % 4) * SLIDE}s`, '--cycle': `${SLIDE * 4}s` } as CSSProperties}
+        />
+      ))}
+    </>
+  );
+}
 
 export function ShowScene() {
-  const slides = [1, 2, 3, 4];
   return (
     <div className="sc">
-      <Plate src={sh('plate-lit')} priority />
+      <Plate src={sh('plate')} priority />
 
       {SCREENS.map((s, k) => (
-        <div
-          key={k}
-          className="sh-screen"
-          style={{ left: pc(s.x, 1672), top: pc(s.y, 941), width: pc(s.w, 1672), height: pc(s.h, 941) }}
-        >
-          {slides.map((n, i) => (
-            <Image
-              key={n}
-              src={sh(`slide-${n}`)}
-              alt=""
-              fill
-              unoptimized
-              className="sh-slide"
-              style={{ '--d': `${0.5 + ((i + s.phase) % 4) * SLIDE}s`, '--cycle': `${SLIDE * 4}s` } as CSSProperties}
-            />
-          ))}
+        <div key={k} className="sh-screen" style={rect(s)}>
+          <Slides phase={s.phase} />
         </div>
       ))}
+
+      {MONITORS.map((m, k) => (
+        <div key={k} className="sh-screen sh-monitor" style={rect(m)}>
+          <Slides phase={m.phase} />
+        </div>
+      ))}
+
+      {/* the camera operator's monitors: the speaker in close-up, in step with the podium, and the center screen */}
+      <div className="sh-screen sh-monitor sh-cam" style={rect(CAM_SPEAKER)}>
+        <div className="sh-cam-inner">
+          <Frames srcs={PRESENTER} period={SLIDE * 4} delay={0.5} />
+        </div>
+      </div>
+      <div className="sh-screen sh-monitor" style={rect(CAM_SCREEN)}>
+        <Slides phase={CAM_SCREEN.phase} />
+      </div>
 
       <svg className="g-overlay" viewBox="0 0 1672 941" aria-hidden="true" focusable="false" style={{ zIndex: 20 }}>
         <defs>
@@ -297,11 +338,7 @@ export function ShowScene() {
 
       {/* the presenter at the podium: four poses, a new one with every slide */}
       <Sprite x={49.6} y={51.4} w={9} anchor="bottom-center" z={30} delay={0.2}>
-        <Frames
-          srcs={['presenter-a', 'presenter-b', 'presenter-c', 'presenter-d'].map(sh)}
-          period={SLIDE * 4}
-          delay={0.5}
-        />
+        <Frames srcs={PRESENTER} period={SLIDE * 4} delay={0.5} />
       </Sprite>
     </div>
   );

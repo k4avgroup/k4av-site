@@ -5099,3 +5099,30 @@ html {
     opacity: 1;
   }
 }
+
+.sc-frame-4 {
+  animation-name: sc-frame4;
+}
+@keyframes sc-frame4 {
+  0% {
+    opacity: 1;
+  }
+  25%,
+  100% {
+    opacity: 0;
+  }
+}
+.sh-monitor {
+  z-index: 11;
+  background: #05070a;
+}
+.sh-cam {
+  background: linear-gradient(160deg, #123a7a, #0a1f45);
+}
+.sh-cam-inner {
+  position: absolute;
+  left: -73%;
+  top: -0.7%;
+  width: 241%;
+  aspect-ratio: 1;
+}
