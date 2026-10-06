@@ -27,8 +27,8 @@ export default function Events() {
     <>
       <DivisionHero
         eyebrow="Live event production"
-        lead="Live Production."
-        accent="Engineered for the Moment."
+        lead="Live Production, engineered for"
+        accent="the moment."
         text="Technical production for corporate events, meetings, presentations, celebrations and live experiences across the Seattle area."
         primary={{ href: divisions.events.quote, label: 'Plan an Event' }}
         secondary={{ href: '#services', label: 'Explore Event Services' }}
