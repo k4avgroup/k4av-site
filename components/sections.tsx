@@ -246,15 +246,24 @@ export function ProcessTimeline() {
 export function CertificationsSection() {
   const items = credentials.filter((c) => c.verified);
   if (items.length === 0) return null;
+  const featured = items.filter((c) => c.featured);
+  const groups = Object.entries(
+    items
+      .filter((c) => !c.featured)
+      .reduce<Record<string, string[]>>((acc, c) => {
+        (acc[c.issuer] ||= []).push(c.name);
+        return acc;
+      }, {}),
+  );
   return (
-    <section className="section container" id="certifications">
+    <section className="section section-compact container" id="certifications">
       <SectionHeading
         eyebrow="Certifications"
         title="Certified on the platforms we work with."
         text="Manufacturer and industry certifications behind our work."
       />
-      <div className="feature-list">
-        {items.map((c) => (
+      <div className="cred-featured">
+        {featured.map((c) => (
           <article key={c.name}>
             <span className="eyebrow">{c.issuer}</span>
             <h3>{c.name}</h3>
@@ -262,10 +271,17 @@ export function CertificationsSection() {
           </article>
         ))}
       </div>
+      <dl className="cred-groups">
+        {groups.map(([issuer, names]) => (
+          <div key={issuer}>
+            <dt>{issuer}</dt>
+            <dd>{names.join(' · ')}</dd>
+          </div>
+        ))}
+      </dl>
     </section>
   );
 }
-
 export function ExperienceSection() {
   return (
     <section className="section container expertise">

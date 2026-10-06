@@ -52,3 +52,20 @@ export function GalleryStrip() {
     </section>
   );
 }
+
+// A few chosen frames with a caption each: the result, the work behind it and a live job.
+export function SelectedWork({ items }: { items: { photo: Photo; caption: string }[] }) {
+  return (
+    <section className="section section-compact container selected-work" aria-label="Selected work">
+      <SectionHeading eyebrow="Selected work" title="Real rooms. Real systems." />
+      <div className="selected-grid">
+        {items.map((x) => (
+          <figure key={x.photo.src}>
+            <Shot photo={x.photo} sizes="(max-width: 800px) 100vw, 33vw" />
+            <figcaption>{x.caption}</figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
+  );
+}

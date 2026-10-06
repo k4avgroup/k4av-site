@@ -5320,3 +5320,148 @@ h3 {
 .home-panel-events .home-panel-fade {
   background: linear-gradient(90deg, #080a0d 0%, rgb(8 10 13 / 84%) 34%, rgb(8 10 13 / 0%) 72%);
 }
+
+/* ============ Design pass 2: certifications, selected work, rentals ============ */
+.section-compact {
+  padding-block: 56px;
+}
+.founder-role {
+  margin: -6px 0 18px;
+  color: var(--text);
+  font-weight: 600;
+}
+.cred-featured {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.cred-featured article {
+  padding: 24px;
+  border: 1px solid var(--blue-border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+.cred-featured h3 {
+  margin: 8px 0 6px;
+}
+.cred-featured p {
+  margin: 0;
+  font-size: var(--type-small);
+}
+.cred-groups {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0 48px;
+  margin: 28px 0 0;
+}
+.cred-groups > div {
+  display: flex;
+  gap: 20px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+.cred-groups dt {
+  flex: 0 0 96px;
+  color: var(--accent-text);
+  font-family: var(--technical-font);
+  font-size: var(--type-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding-top: 2px;
+}
+.cred-groups dd {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--type-small);
+}
+.selected-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+.selected-grid figure {
+  margin: 0;
+}
+.selected-grid .shot {
+  aspect-ratio: 3 / 2;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+.selected-grid figcaption {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+.rental-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 16px;
+}
+.rental-photo-grid a {
+  position: relative;
+  grid-column: span 2;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+}
+.rental-photo-grid a:nth-child(n + 4) {
+  grid-column: span 3;
+}
+.rental-photo-grid .shot {
+  aspect-ratio: 3 / 2;
+}
+.rental-photo-grid a:nth-child(n + 4) .shot {
+  aspect-ratio: 16 / 7;
+}
+.rental-photo-grid .shot img {
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+.rental-photo-grid a:hover .shot img {
+  transform: scale(1.03);
+}
+.rental-photo-grid a > span {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 40px 20px 16px;
+  background: linear-gradient(0deg, rgb(8 10 13 / 88%), rgb(8 10 13 / 0%));
+  color: #fff;
+  font-size: var(--type-body);
+  font-weight: 600;
+}
+.rental-action {
+  margin-top: 28px;
+}
+@media (max-width: 900px) {
+  .cred-featured,
+  .selected-grid {
+    grid-template-columns: 1fr;
+  }
+  .cred-groups {
+    grid-template-columns: 1fr;
+  }
+  .rental-photo-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .rental-photo-grid a,
+  .rental-photo-grid a:nth-child(n + 4) {
+    grid-column: span 1;
+  }
+  .rental-photo-grid a:nth-child(5) {
+    grid-column: 1 / -1;
+  }
+  .rental-photo-grid a:nth-child(n + 4) .shot {
+    aspect-ratio: 3 / 2;
+  }
+}
+@media (max-width: 560px) {
+  .rental-photo-grid {
+    grid-template-columns: 1fr;
+  }
+  .rental-photo-grid a:nth-child(5) {
+    grid-column: auto;
+  }
+}
