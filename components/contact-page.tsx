@@ -5,47 +5,16 @@ import { InquiryForm } from '@/components/inquiry-form';
 import { divisions } from '@/data/division';
 import { site } from '@/data/site';
 
-// One contact page for both divisions: general questions, partnerships and offers.
-// Project and event requests have their own forms, linked from the two cards.
+// One contact page for both divisions: general questions, partnerships and offers, with the form first.
+// Project and event requests have their own forms, linked from the two cards below.
 export function ContactPage() {
   return (
     <>
       <PageIntro
         eyebrow="Contact"
         title="Get in touch."
-        text="Have a question, an idea for working together or something to offer? Send us a message and we’ll get back to you."
+        text="A question, an idea or something to offer? Send a message and we’ll reply."
       />
-
-      <section className="container contact-choice-section" aria-labelledby="project-heading">
-        <h2 id="project-heading" className="contact-subhead">
-          Planning a project or an event?
-        </h2>
-        <p className="contact-subtext">Use one of these requests so we can scope the technical side properly.</p>
-        <div className="contact-choice">
-          <article className="choice-card choice-integration">
-            <span className="eyebrow">AV Integration</span>
-            <h3>Systems for rooms and buildings</h3>
-            <p>Commissioning, programming, troubleshooting and technical support for commercial AV.</p>
-            <Link className="button" href={divisions.integration.quote}>
-              Request an AV Consultation
-              <ArrowUpRight size={17} aria-hidden="true" />
-            </Link>
-          </article>
-          <article className="choice-card choice-events">
-            <span className="eyebrow">Live Events</span>
-            <h3>Production for the day of the event</h3>
-            <p>Audio, video and technical production for corporate events, meetings and presentations.</p>
-            <Link className="button" href={divisions.events.quote}>
-              Plan an Event
-              <ArrowUpRight size={17} aria-hidden="true" />
-            </Link>
-          </article>
-        </div>
-      </section>
-
-      <div className="container contact-divider" role="separator">
-        <span>or just get in touch</span>
-      </div>
 
       <section className="container page-content contact-layout">
         <div>
@@ -99,6 +68,33 @@ export function ContactPage() {
             </div>
           )}
         </aside>
+      </section>
+
+      <section className="container contact-choice-section contact-choice-last" aria-labelledby="project-heading">
+        <h2 id="project-heading" className="contact-subhead">
+          Planning a project or an event?
+        </h2>
+        <p className="contact-subtext">Use one of these requests so we can scope the technical side properly.</p>
+        <div className="contact-choice">
+          <article className="choice-card choice-integration">
+            <span className="eyebrow">AV Integration</span>
+            <h3>Systems for rooms and buildings</h3>
+            <p>Commissioning, programming, troubleshooting and technical support for commercial AV.</p>
+            <Link className="button" href={divisions.integration.quote}>
+              Request an AV Consultation
+              <ArrowUpRight size={17} aria-hidden="true" />
+            </Link>
+          </article>
+          <article className="choice-card choice-events">
+            <span className="eyebrow">Live Events</span>
+            <h3>Production for the day of the event</h3>
+            <p>Audio, video and technical production for corporate events, meetings and presentations.</p>
+            <Link className="button" href={divisions.events.quote}>
+              Plan an Event
+              <ArrowUpRight size={17} aria-hidden="true" />
+            </Link>
+          </article>
+        </div>
       </section>
     </>
   );

@@ -146,6 +146,9 @@ export const founderPath: { title: string; photo: Photo }[] = [
 
 // TODO(owner): confirm each name. Shown as experience ("supporting projects and events for"), never as logos
 // and never as K4 AV Group clients. "UDAP" and the universities were mentioned but not spelled out yet.
+// Role shown next to the founder photo on About. Add the name here when the owner wants it published.
+export const founder = { name: 'Igor Kovalenko' as string | null, role: 'Founder and lead AV engineer' };
+
 export const experienceOrgs = ['Microsoft', 'Amazon', 'Apple', 'Airbnb', 'Sound Transit', 'Expedia', 'Boeing'];
 
 // Rental categories we plan to offer. Add real equipment to `equipment` in data/catalog.ts.
@@ -210,6 +213,8 @@ export const credentials: {
   detail: string;
   kind: 'certification' | 'training';
   verified: boolean;
+  // the main qualifications, shown large; the rest are grouped by manufacturer
+  featured?: boolean;
 }[] = [
   {
     name: 'Certified Technology Specialist (CTS)',
@@ -217,6 +222,7 @@ export const credentials: {
     detail: 'Valid through January 2029',
     kind: 'certification',
     verified: true,
+    featured: true,
   },
   {
     name: 'Dante Certified, Level 3',
@@ -224,6 +230,7 @@ export const credentials: {
     detail: 'Valid through January 2028',
     kind: 'certification',
     verified: true,
+    featured: true,
   },
   {
     name: 'Dante Certified, Level 2',
@@ -238,6 +245,7 @@ export const credentials: {
     detail: 'Valid through August 2028',
     kind: 'certification',
     verified: true,
+    featured: true,
   },
   {
     name: 'Q-SYS VisionSuite ACPR Commissioning, Level 1',

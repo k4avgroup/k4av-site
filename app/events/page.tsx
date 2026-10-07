@@ -2,8 +2,8 @@ import Link from 'next/link';
 import {
   DivisionHero,
   TileGrid,
-  GroupCards,
-  WidePhoto,
+  FeaturedCase,
+  ServiceList,
   DetailTrio,
   ExperienceCards,
   DivisionCTA,
@@ -27,8 +27,8 @@ export default function Events() {
     <>
       <DivisionHero
         eyebrow="Live event production"
-        lead="Live Production."
-        accent="Engineered for the Moment."
+        lead="Live Production, engineered for"
+        accent="the moment."
         text="Technical production for corporate events, meetings, presentations, celebrations and live experiences across the Seattle area."
         primary={{ href: divisions.events.quote, label: 'Plan an Event' }}
         secondary={{ href: '#services', label: 'Explore Event Services' }}
@@ -62,6 +62,13 @@ export default function Events() {
         tiles={eventTypes}
       />
 
+      <FeaturedCase
+        photo={photos.consoleBigScreen}
+        eyebrow="Front of house"
+        title="One position runs the whole room."
+        text="Audio, video and presentation systems run from one place at a large corporate conference, tested before doors open."
+      />
+
       <section className="section container" id="scale">
         <SectionHeading
           eyebrow="Event scale"
@@ -83,9 +90,7 @@ export default function Events() {
         </div>
       </section>
 
-      <GroupCards id="services" eyebrow="Event services" title="What we do on show day." groups={eventServices} />
-
-      <WidePhoto photo={photos.consoleBigScreen} caption="Front-of-house at a large corporate conference." />
+      <ServiceList id="services" eyebrow="Event services" title="What we do on show day." groups={eventServices} />
 
       <DetailTrio
         items={[

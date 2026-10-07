@@ -1,11 +1,11 @@
 import { PageIntro } from '@/components/ui';
 import { CertificationsSection } from '@/components/sections';
 import { FounderPath, FinalCTA } from '@/components/home';
-import { GalleryStrip, Shot } from '@/components/photos';
+import { SelectedWork, Shot } from '@/components/photos';
 import { InquiryForm } from '@/components/inquiry-form';
 import { photos } from '@/data/photos';
 import { divisions, type Division } from '@/data/division';
-import { experienceYears, experienceOrgs } from '@/data/site';
+import { experienceYears, experienceOrgs, founder } from '@/data/site';
 
 // Pages shared by both divisions. Each division has its own route (/integration/about, /events/about, ...)
 // so the header tabs, section navigation and theme stay in place.
@@ -23,7 +23,12 @@ export function AboutPage({ division }: { division: Division }) {
           <Shot photo={photos.founderConsole} sizes="(max-width: 900px) 100vw, 40vw" className="about-shot" />
         </div>
         <div>
+          <span className="eyebrow">Founder</span>
           <h2>From music to AV systems.</h2>
+          <p className="founder-role">
+            {founder.name ? `${founder.name}, ` : ''}
+            {founder.role}
+          </p>
           <p className="lead">
             The founder’s path started in music and recording and moved into live sound and large corporate productions.
             Over {experienceYears} years, that grew into commercial AV work: commissioning, DSP, control, networking and
@@ -44,7 +49,13 @@ export function AboutPage({ division }: { division: Division }) {
         <FounderPath />
       </section>
       <CertificationsSection />
-      <GalleryStrip />
+      <SelectedWork
+        items={[
+          { photo: photos.roomGrand, caption: 'Boardroom with a wall display and table connectivity.' },
+          { photo: photos.racksBlue, caption: 'Equipment racks with labeled network patching during a system build.' },
+          { photo: photos.consoleBigScreen, caption: 'Front of house at a large corporate conference.' },
+        ]}
+      />
       <FinalCTA href={divisions[division].quote} />
     </>
   );
