@@ -472,9 +472,18 @@ function HowDesktop({ division, id, c }: { division: Division; id?: string; c: C
 
         <div className="how-stage" ref={stage} style={stageTop === undefined ? undefined : { top: stageTop }}>
           <StageCard c={c} active={active} visible={visible} run={run} />
-          <div className="how-progress" aria-hidden="true">
-            {Array.from({ length: total }).map((_, i) => (
-              <span key={i} className={i === active ? 'on' : i < active ? 'past' : ''} />
+          <div className="how-picker" role="group" aria-label="Choose a step">
+            {[...c.steps.map((s) => s.title), ...(c.done ? [c.done.title] : [])].map((label, i) => (
+              <button
+                key={label}
+                type="button"
+                className={i === active ? 'on' : i < active ? 'past' : undefined}
+                aria-current={i === active ? 'step' : undefined}
+                aria-label={`Step ${i + 1}: ${label}`}
+                onClick={() => blocks.current[i]?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+              >
+                {String(i + 1).padStart(2, '0')}
+              </button>
             ))}
           </div>
         </div>
