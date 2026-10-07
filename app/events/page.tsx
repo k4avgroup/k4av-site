@@ -4,11 +4,12 @@ import {
   TileGrid,
   FeaturedCase,
   ServiceList,
+  Split,
   DetailTrio,
   ExperienceCards,
   DivisionCTA,
 } from '@/components/division';
-import { SectionHeading } from '@/components/ui';
+import { Button, SectionHeading } from '@/components/ui';
 import { Shot } from '@/components/photos';
 import { photos } from '@/data/photos';
 import { eventTypes, eventScale, eventServices, eventExperience, divisions } from '@/data/division';
@@ -114,14 +115,12 @@ export default function Events() {
         }
       />
 
-      <section className="section container" id="rentals">
-        <SectionHeading
-          eyebrow="Rentals"
-          title="Equipment for your event."
-          text="Our rental inventory is growing. Request availability and we’ll confirm what we can provide."
-          action={{ href: '/events/rentals', label: 'Browse rentals' }}
-        />
-      </section>
+      <Split id="rentals" eyebrow="Rentals" title="Equipment for your event." photo={photos.wirelessMics} reverse>
+        <p>Our rental inventory is growing. Request availability and we’ll confirm what we can provide.</p>
+        <Button href="/events/rentals" secondary>
+          Browse rentals
+        </Button>
+      </Split>
 
       <DivisionCTA
         title="Have an event coming up?"

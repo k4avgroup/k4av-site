@@ -4,6 +4,8 @@ import { PageIntro } from '@/components/ui';
 import { InquiryForm } from '@/components/inquiry-form';
 import { divisions } from '@/data/division';
 import { site } from '@/data/site';
+import { photos } from '@/data/photos';
+import { Shot } from '@/components/photos';
 
 // One contact page for both divisions: general questions, partnerships and offers, with the form first.
 // Project and event requests have their own forms, linked from the two cards below.
@@ -25,6 +27,7 @@ export function ContactPage() {
           <InquiryForm kind="contact" />
         </div>
         <aside className="contact-aside">
+          <Shot photo={photos.founderOnSite} sizes="(max-width: 900px) 100vw, 40vw" className="aside-shot" />
           <div>
             <h3>
               <Mail size={18} aria-hidden="true" /> Email
