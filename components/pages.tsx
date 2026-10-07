@@ -76,6 +76,9 @@ const quoteCopy = {
   },
 } as const;
 
+// A real photo beside each request form, until the owner picks others.
+const quotePhotos = { integration: photos.roomMeeting, events: photos.galaDinner } as const;
+
 export function QuotePage({ division, service, context }: { division: Division; service?: string; context?: string }) {
   const text = quoteCopy[division];
   return (
@@ -84,6 +87,7 @@ export function QuotePage({ division, service, context }: { division: Division; 
       <section className="container page-content contact-layout">
         <InquiryForm kind="quote" division={division} defaultService={service} context={context?.slice(0, 1000)} />
         <aside className="contact-aside">
+          <Shot photo={quotePhotos[division]} sizes="(max-width: 900px) 100vw, 40vw" className="aside-shot" />
           <div>
             <h3>A useful starting point</h3>
             <p>{text.help}</p>

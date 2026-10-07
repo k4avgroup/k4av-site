@@ -5528,3 +5528,9 @@ h3 {
     grid-template-columns: 1fr;
   }
 }
+
+/* a photo at the top of the side column on Contact and the request pages */
+.contact-aside .aside-shot {
+  margin-bottom: 8px;
+  aspect-ratio: 3 / 2;
+}
