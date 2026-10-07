@@ -5465,3 +5465,66 @@ h3 {
     grid-column: auto;
   }
 }
+
+/* ============ Design pass 3: one large case, plain service columns, one photo format ============ */
+.featured-case figure {
+  margin: 0;
+}
+.featured-case .case-shot {
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-card);
+}
+.featured-case figcaption {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px 48px;
+  align-items: end;
+  margin-top: 28px;
+}
+.featured-case h2 {
+  margin: 8px 0 0;
+}
+.featured-case p {
+  margin: 0;
+  max-width: 520px;
+}
+.service-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0 40px;
+}
+.service-columns > div {
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  position: relative;
+}
+.service-columns > div::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 0;
+  width: 40px;
+  height: 2px;
+  background: var(--accent);
+}
+.service-columns h3 {
+  margin: 0 0 12px;
+}
+.service-columns ul {
+  margin: 0 0 24px;
+  padding: 0;
+  list-style: none;
+}
+.service-columns li {
+  padding: 5px 0;
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+.wide-shot {
+  aspect-ratio: 16 / 9;
+}
+@media (max-width: 800px) {
+  .featured-case figcaption {
+    grid-template-columns: 1fr;
+  }
+}

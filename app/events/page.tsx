@@ -2,8 +2,8 @@ import Link from 'next/link';
 import {
   DivisionHero,
   TileGrid,
-  GroupCards,
-  WidePhoto,
+  FeaturedCase,
+  ServiceList,
   DetailTrio,
   ExperienceCards,
   DivisionCTA,
@@ -62,6 +62,13 @@ export default function Events() {
         tiles={eventTypes}
       />
 
+      <FeaturedCase
+        photo={photos.consoleBigScreen}
+        eyebrow="Front of house"
+        title="One position runs the whole room."
+        text="Audio, video and presentation systems run from one place at a large corporate conference, tested before doors open."
+      />
+
       <section className="section container" id="scale">
         <SectionHeading
           eyebrow="Event scale"
@@ -83,9 +90,7 @@ export default function Events() {
         </div>
       </section>
 
-      <GroupCards id="services" eyebrow="Event services" title="What we do on show day." groups={eventServices} />
-
-      <WidePhoto photo={photos.consoleBigScreen} caption="Front-of-house at a large corporate conference." />
+      <ServiceList id="services" eyebrow="Event services" title="What we do on show day." groups={eventServices} />
 
       <DetailTrio
         items={[

@@ -3,9 +3,9 @@ import {
   DivisionHero,
   QuickFacts,
   TileGrid,
-  GroupCards,
+  FeaturedCase,
+  ServiceList,
   Split,
-  WidePhoto,
   DetailTrio,
   Chips,
   ExperienceCards,
@@ -75,7 +75,14 @@ export default function Integration() {
         tiles={spaces}
       />
 
-      <GroupCards
+      <FeaturedCase
+        photo={photos.roomBoardView}
+        eyebrow="Boardroom"
+        title="A room that works the first time."
+        text="Wall display, table connectivity and room control, configured, tested and documented before hand-over."
+      />
+
+      <ServiceList
         eyebrow="Services"
         title="What we do"
         text="Capabilities across integration, audio, control and support."
@@ -84,22 +91,12 @@ export default function Integration() {
 
       <HowItWorks division="integration" id="commissioning" />
 
-      <DetailTrio
-        items={[
-          { photo: photos.roomControl, label: 'Room control and cabling' },
-          { photo: photos.roomLectern, label: 'Lectern and presentation systems' },
-          { photo: photos.roomPresent, label: 'Large presentation rooms' },
-        ]}
-      />
-
       <Split eyebrow="Engineering details" title="Clean racks. Reliable systems." photo={photos.rackQsys}>
         <p>Professional rack integration, cable management and system configuration built for long-term reliability.</p>
         <Button href="#platforms" secondary>
           Technologies we use
         </Button>
       </Split>
-
-      <WidePhoto photo={photos.roomEventRoom} />
 
       <DetailTrio
         items={[

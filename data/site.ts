@@ -147,7 +147,7 @@ export const founderPath: { title: string; photo: Photo }[] = [
 // TODO(owner): confirm each name. Shown as experience ("supporting projects and events for"), never as logos
 // and never as K4 AV Group clients. "UDAP" and the universities were mentioned but not spelled out yet.
 // Role shown next to the founder photo on About. Add the name here when the owner wants it published.
-export const founder = { name: null as string | null, role: 'Founder and lead AV engineer' };
+export const founder = { name: 'Igor Kovalenko' as string | null, role: 'Founder and lead AV engineer' };
 
 export const experienceOrgs = ['Microsoft', 'Amazon', 'Apple', 'Airbnb', 'Sound Transit', 'Expedia', 'Boeing'];
 

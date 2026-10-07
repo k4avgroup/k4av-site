@@ -123,6 +123,66 @@ export function GroupCards({
   );
 }
 
+// One large, well-photographed example with a short caption: more convincing than several equal cards.
+export function FeaturedCase({
+  photo,
+  eyebrow,
+  title,
+  text,
+}: {
+  photo: Photo;
+  eyebrow: string;
+  title: string;
+  text: string;
+}) {
+  return (
+    <section className="section section-compact container featured-case">
+      <figure>
+        <Shot photo={photo} sizes="(max-width: 1300px) 100vw, 1280px" className="case-shot" />
+        <figcaption>
+          <div>
+            <span className="eyebrow">{eyebrow}</span>
+            <h2>{title}</h2>
+          </div>
+          <p>{text}</p>
+        </figcaption>
+      </figure>
+    </section>
+  );
+}
+
+// Short services as plain columns: they are read, not compared, so they do not need cards.
+export function ServiceList({
+  id,
+  eyebrow,
+  title,
+  text,
+  groups,
+}: {
+  id?: string;
+  eyebrow: string;
+  title: string;
+  text?: string;
+  groups: { title: string; items: string[] }[];
+}) {
+  return (
+    <section className="section section-compact container" id={id}>
+      <SectionHeading eyebrow={eyebrow} title={title} text={text} />
+      <div className="service-columns">
+        {groups.map((g) => (
+          <div key={g.title}>
+            <h3>{g.title}</h3>
+            <ul>
+              {g.items.map((x) => (
+                <li key={x}>{x}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 export function Steps({
   id,
   eyebrow,
