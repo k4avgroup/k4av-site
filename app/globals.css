@@ -5601,3 +5601,45 @@ h3 {
     scroll-padding-top: calc(var(--header-h, 69px) + 52px);
   }
 }
+
+/* Section navigation on phones: a fade shows there are more links, and goes away at the end of the row */
+.secondary-nav {
+  --nav-fade: var(--bg);
+}
+.division[data-division='events'] .secondary-nav {
+  --nav-fade: #171e28;
+}
+.secondary-nav::before,
+.secondary-nav::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 3;
+  width: 56px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.secondary-nav::before {
+  left: 0;
+  background: linear-gradient(90deg, var(--nav-fade) 20%, transparent);
+}
+.secondary-nav::after {
+  right: 0;
+  background: linear-gradient(270deg, var(--nav-fade) 20%, transparent);
+}
+.secondary-nav[data-fade-left]::before,
+.secondary-nav[data-fade-right]::after {
+  opacity: 1;
+}
+
+/* header logo 8% larger (44 px to 47.5 px; 26 px to 28 px on phones) */
+.logo-img {
+  height: 47.5px;
+}
+@media (max-width: 800px) {
+  .logo-img {
+    height: 28px;
+  }
+}
