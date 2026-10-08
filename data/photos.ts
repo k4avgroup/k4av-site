@@ -3,8 +3,8 @@
 export type Photo = { src: string; alt: string };
 
 const p = (name: string, alt: string): Photo => ({ src: `/images/site/${name}.webp`, alt });
-// Room photos edited at 2400px (public/images/integration/room-*.webp).
-const r = (code: string, alt: string): Photo => ({ src: `/images/integration/room-${code}.webp`, alt });
+// Room photos edited at 2400px (room-*-b.webp in public/images/integration): one exposure and white balance for the whole series.
+const r = (code: string, alt: string): Photo => ({ src: `/images/integration/room-${code}-b.webp`, alt });
 
 export const photos = {
   ballroomGreen: p('ev-9547', 'Audio and video control position at the back of a large hotel ballroom lit in green'),
