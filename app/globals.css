@@ -5588,3 +5588,16 @@ h3 {
     display: none;
   }
 }
+
+/* Section navigation: 20% lower (59 px to 47 px); the dark header above it keeps its size */
+@media (min-width: 801px) {
+  .secondary-nav a {
+    padding: 10px 18px;
+  }
+  .nav-sep {
+    margin-block: 11px;
+  }
+  html {
+    scroll-padding-top: calc(var(--header-h, 69px) + 52px);
+  }
+}
