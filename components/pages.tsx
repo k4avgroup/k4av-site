@@ -6,7 +6,7 @@ import { SelectedWork, Shot } from '@/components/photos';
 import { InquiryForm } from '@/components/inquiry-form';
 import { photos } from '@/data/photos';
 import { divisions, type Division } from '@/data/division';
-import { experienceYears, experienceOrgs, founder } from '@/data/site';
+import { experienceOrgs, founder, founderFacts } from '@/data/site';
 
 // Pages shared by both divisions. Each division has its own route (/integration/about, /events/about, ...)
 // so the header tabs, section navigation and theme stay in place.
@@ -25,53 +25,32 @@ export function AboutPage({ division }: { division: Division }) {
         </div>
         <div>
           <span className="eyebrow">Founder</span>
-          <h2>From music to AV systems.</h2>
-          <p className="founder-role">
-            {founder.name ? `${founder.name}, ` : ''}
-            {founder.role}
-          </p>
+          <h2>{founder.name ?? 'The founder'}</h2>
+          <p className="founder-role">{founder.role}</p>
           <p className="lead">
-            Ihor came to audiovisual technology from music, not from IT or construction. Performing, recording and live
-            sound built the ear. Corporate events and enterprise commissioning built the engineering.
+            Audio engineer and AV commissioning specialist. He came to AV from music and builds systems that work the
+            same way for every presenter, every call, every day.
           </p>
           <p>
-            Over {experienceYears} years in audio and music, that grew into corporate event production with Encore
-            Global in Washington State, then into enterprise AV commissioning with AVI-SPL: commissioning, DSP, control,
-            networking and troubleshooting. Understanding how audio, video and control systems work together, and how a
-            live show runs, means fewer surprises for you.
+            Before K4 AV Group: Encore Global, running corporate events across Washington State, and AVI-SPL, on
+            enterprise AV commissioning. You talk to the person who does the work.
           </p>
-          <p>
-            The experience includes supporting projects and events for organizations including{' '}
-            {experienceOrgs.join(', ')} and public universities. It was gained in previous professional roles and does
-            not describe K4 AV Group client projects.
-          </p>
-          <p>
-            K4 AV Group is small enough to be personal and experienced enough to handle serious AV work. You talk to the
-            person who does the work.
+          <dl className="founder-facts">
+            {founderFacts.map((f) => (
+              <div key={f.value}>
+                <dt>{f.value}</dt>
+                <dd>{f.label}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="org-list">
+            Experience supporting projects and events for {experienceOrgs.join(', ')}. Gained in previous roles; not K4
+            AV Group client projects.
           </p>
         </div>
       </section>
       <section className="container">
         <FounderPath />
-      </section>
-      <section className="section container" id="approach">
-        <div className="intro-split">
-          <div>
-            <span className="eyebrow">Our approach</span>
-            <h2>From taste to repeatability.</h2>
-          </div>
-          <div>
-            <p className="lead">
-              A good ear matters. A professional system also has to work for another operator, another presenter and
-              another call tomorrow.
-            </p>
-            <ul className="check-list">
-              <li>Does every microphone behave the same way every time?</li>
-              <li>Does speech stay clear in the room and for the people on the far end?</li>
-              <li>Can another engineer reproduce the result from the documentation?</li>
-            </ul>
-          </div>
-        </div>
       </section>
       <CertificationsSection />
       <AffiliationsSection />

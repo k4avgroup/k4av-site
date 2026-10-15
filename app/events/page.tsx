@@ -14,7 +14,7 @@ import { Shot } from '@/components/photos';
 import { photos } from '@/data/photos';
 import { eventTypes, eventScale, eventServices, eventExperience, divisions } from '@/data/division';
 import { HowItWorks } from '@/components/how-it-works';
-import { experienceOrgs } from '@/data/site';
+import { eventOrgs } from '@/data/site';
 import { pageMetadata } from '@/lib/metadata';
 
 export const metadata = pageMetadata(
@@ -110,7 +110,7 @@ export default function Events() {
         note={
           <>
             Experience gained in previous professional roles supporting corporate events and productions, including for
-            organizations such as {experienceOrgs.join(', ')}. These are not K4 AV Group client projects.
+            organizations such as {eventOrgs.join(', ')}. These are not K4 AV Group client projects.
           </>
         }
       />

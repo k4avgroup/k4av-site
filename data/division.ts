@@ -237,15 +237,20 @@ export const eventSteps = [
   'Strike',
 ];
 
+// The numbers are the founder’s own record at Encore (about 18 months), confirmed by him and by a letter from his
+// director there.
 export const eventExperience = [
   {
-    title: 'Enterprise corporate production',
-    text: 'Audio and technical support for large corporate meetings and general sessions.',
+    title: '50+ corporate events',
+    text: 'Led as A1 and audio lead in about 18 months: conferences, general sessions and executive meetings.',
   },
-  { title: 'From load-in to show', text: 'Setting up, testing and running systems so the day runs to plan.' },
-  { title: 'High-stakes live audio', text: 'FOH mixing and RF coordination where there is no second take.' },
   {
-    title: 'Complex corporate AV',
-    text: 'Coordinating audio, video and presentation systems across multi-room events.',
+    title: 'Crews of five to six',
+    text: 'Technicians, assistants and an A2, from load-in and system setup to show and strike.',
   },
+  {
+    title: 'The whole event cycle',
+    text: 'System design and install, on-site measurements and acoustic checks, FOH, then strike and equipment return.',
+  },
+  { title: 'High-stakes live audio', text: 'FOH mixing and RF coordination where there is no second take.' },
 ];
