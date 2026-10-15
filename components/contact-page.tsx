@@ -42,7 +42,11 @@ export function ContactPage() {
             <h3>
               <Phone size={18} aria-hidden="true" /> Phone
             </h3>
-            {site.phone ? <a href={`tel:${site.phone}`}>{site.phone}</a> : <p>Phone number coming soon.</p>}
+            {site.phone ? (
+              <a href={`tel:${site.phoneTel ?? site.phone}`}>{site.phone}</a>
+            ) : (
+              <p>Phone number coming soon.</p>
+            )}
           </div>
           <div>
             <h3>

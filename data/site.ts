@@ -7,7 +7,9 @@ export const site = {
     'K4 AV Group is a founder-led AV company in Seattle: commercial AV integration and commissioning, live event production and equipment rentals across the Greater Seattle area.',
   area: 'Seattle / Bellevue / Greater Seattle Area',
   email: 'info@k4av.com' as string | null,
-  phone: null as string | null,
+  // Google Voice business line. `phone` is what visitors read, `phoneTel` is the dialable form for tel: links and structured data.
+  phone: '(425) 477-9735' as string | null,
+  phoneTel: '+14254779735' as string | null,
   // TODO(owner): street or mailing address, shown on the Contact page when set.
   address: null as string | null,
   socials: [] as { label: string; url: string }[],

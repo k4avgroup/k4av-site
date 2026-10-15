@@ -35,6 +35,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               url: siteOrigin,
               description: site.description,
               areaServed: ['Seattle', 'Bellevue', 'Greater Seattle Area'],
+              ...(site.email && { email: site.email }),
+              ...(site.phoneTel && { telephone: site.phoneTel }),
             }).replace(/</g, '\\u003c'),
           }}
         />
