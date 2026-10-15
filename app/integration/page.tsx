@@ -7,7 +7,7 @@ import {
   ServiceList,
   Split,
   DetailTrio,
-  Chips,
+  PlatformGroups,
   ExperienceCards,
   DivisionCTA,
 } from '@/components/division';
@@ -15,7 +15,7 @@ import { Button, SectionHeading } from '@/components/ui';
 import { HowItWorks } from '@/components/how-it-works';
 import { Shot } from '@/components/photos';
 import { photos } from '@/data/photos';
-import { spaces, serviceGroups, platformList, integrationExperience, divisions } from '@/data/division';
+import { spaces, serviceGroups, platformGroups, integrationExperience, divisions } from '@/data/division';
 import { experienceYears, experienceOrgs } from '@/data/site';
 import { pageMetadata } from '@/lib/metadata';
 
@@ -54,8 +54,8 @@ export default function Integration() {
           </div>
           <div>
             <p className="lead">
-              K4 AV Group is built on {experienceYears} years of hands-on audio and AV work: commissioning, programming,
-              troubleshooting and real-world live production.
+              K4 AV Group is built on {experienceYears} years in audio and music and hands-on commissioning,
+              programming, troubleshooting and real-world live production.
             </p>
             <p>
               We understand how the whole system works, so rooms are handed over tested, documented and easy to use.
@@ -112,7 +112,7 @@ export default function Integration() {
           title="Platforms we have worked with."
           text="Professional experience with these systems. K4 AV Group is not an authorized dealer unless stated."
         />
-        <Chips items={platformList} />
+        <PlatformGroups groups={platformGroups} />
       </section>
 
       <ExperienceCards

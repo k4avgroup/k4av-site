@@ -133,7 +133,32 @@ export const commissioningSteps = [
 ];
 
 // TODO(owner): confirm each platform is one you have worked with professionally.
-export const platformList = ['Q-SYS', 'Biamp Tesira', 'Extron', 'Crestron', 'Dante', 'AES67', 'Shure', 'Sennheiser'];
+// Taken from the owner’s résumé and LinkedIn posts; this is a list of work areas, not manufacturer authorization.
+export const platformGroups: { title: string; items: string[] }[] = [
+  { title: 'Audio and DSP', items: ['Q-SYS', 'Biamp Tesira', 'Dante', 'AES67', 'Shure', 'Sennheiser'] },
+  { title: 'Control', items: ['Crestron', 'Extron', 'Q-SYS control'] },
+  {
+    title: 'Networking',
+    items: ['Dante and AES67 networks', 'VLANs and IGMP', 'PoE', 'Managed AV switches (NETGEAR AV, Cisco Catalyst)'],
+  },
+  {
+    title: 'Collaboration and video',
+    items: ['Microsoft Teams Rooms', 'Cisco Room systems', 'Poly', 'Neat', 'Barco ClickShare', 'Camera tracking'],
+  },
+  {
+    title: 'Software we use',
+    items: [
+      'Q-SYS Designer',
+      'Tesira software',
+      'Dante Controller',
+      'Shure Designer',
+      'Wireless Workbench',
+      'Crestron Toolbox',
+      'Extron Toolbelt',
+      'SMAART',
+    ],
+  },
+];
 
 export const integrationExperience = [
   {
@@ -141,6 +166,10 @@ export const integrationExperience = [
     text: 'Commissioning and troubleshooting meeting spaces on corporate campuses.',
   },
   { title: 'Networked audio and DSP', text: 'Configuring Dante, DSP and control so rooms behave the same every time.' },
+  {
+    title: 'Speech you can rely on',
+    text: 'Stable gain, DSP built around intelligibility and tests under real call conditions, so everyone on the call is heard.',
+  },
   {
     title: 'Rack builds and handover',
     text: 'Point-to-point testing, cable management and documentation for a clean handoff.',

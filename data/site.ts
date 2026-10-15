@@ -12,7 +12,10 @@ export const site = {
   phoneTel: '+14254779735' as string | null,
   // TODO(owner): street or mailing address, shown on the Contact page when set.
   address: null as string | null,
-  socials: [] as { label: string; url: string }[],
+  socials: [{ label: 'LinkedIn', url: 'https://www.linkedin.com/in/igor-musicman' }] as {
+    label: string;
+    url: string;
+  }[],
   hero: {
     images: [
       '/images/hero/hero-1-ballroom.webp',
@@ -141,17 +144,71 @@ export const whyPoints = [
   },
 ];
 
-export const founderPath: { title: string; photo: Photo }[] = [
-  { title: 'Recording and live sound', photo: photos.liveBand },
-  { title: 'Corporate live events', photo: photos.ballroomConsole },
-  { title: 'AV systems and commissioning', photo: photos.racksBlue },
-  { title: 'K4 AV Group', photo: photos.founderConsole },
+export const founderPath: { title: string; text: string; photo: Photo }[] = [
+  {
+    title: 'Recording and live sound',
+    text: 'Performing, recording, mixing and live sound: the ear that everything else is built on.',
+    photo: photos.liveBand,
+  },
+  {
+    title: 'Corporate live events',
+    text: 'FOH, A1 and audio lead on corporate productions in Washington, where there is no second take.',
+    photo: photos.ballroomConsole,
+  },
+  {
+    title: 'AV systems and commissioning',
+    text: 'Enterprise commissioning: taking conference rooms from installed to tuned, tested and documented.',
+    photo: photos.racksBlue,
+  },
+  {
+    title: 'K4 AV Group',
+    text: 'Founded in 2026: live event support and AV engineering from one accountable person.',
+    photo: photos.founderConsole,
+  },
 ];
 
 // TODO(owner): confirm each name. Shown as experience ("supporting projects and events for"), never as logos
 // and never as K4 AV Group clients. "UDAP" and the universities were mentioned but not spelled out yet.
 // Role shown next to the founder photo on About. Add the name here when the owner wants it published.
-export const founder = { name: 'Igor Kovalenko' as string | null, role: 'Founder and lead AV engineer' };
+export const founder = { name: 'Ihor Kovalenko' as string | null, role: 'Founder and lead AV engineer' };
+
+// Memberships, recognition and education, each backed by a document from the owner: the IEEE membership card,
+// the AES membership page, the SkillsUSA Washington letter of 19 May 2026. Nothing else goes here without a document.
+// IEEE membership runs to 31 December 2026: confirm it was renewed before the site goes into 2027.
+export const affiliations: { kind: string; name: string; detail: string }[] = [
+  { kind: 'Membership', name: 'IEEE', detail: 'Senior Member, 2026' },
+  { kind: 'Membership', name: 'Audio Engineering Society', detail: 'Associate Member since 2025' },
+  {
+    kind: 'Recognition',
+    name: 'SkillsUSA Washington',
+    detail: 'Volunteer judge, Audio Broadcasting competition, State Leadership & Skills Conference, April 2026',
+  },
+  {
+    kind: 'Education',
+    name: 'Kyiv National University of Theatre, Cinema and Television named after I. K. Karpenko-Kary',
+    detail: 'Bachelor’s degree in Sound Engineering',
+  },
+];
+
+// Coverage of the founder’s work. Both pieces appeared while he worked at AVI-SPL and do not mention K4 AV Group,
+// so the page says so. Titles are the outlets’ own; the summaries are ours.
+export const press: { outlet: string; title: string; date: string; summary: string; url: string }[] = [
+  {
+    outlet: 'Tech Times',
+    title: 'Meetings Are Now Data, and if the Input Wobbles, Everything Does',
+    date: 'April 16, 2026',
+    summary:
+      'Why steady microphone input and DSP decide how well AI-assisted meetings work, with enterprise conferencing commissioning as the example.',
+    url: 'https://www.techtimes.com/articles/315924/20260416/meetings-are-now-data-if-input-wobbles-everything-does.htm',
+  },
+  {
+    outlet: 'Glide Magazine',
+    title: 'When Audio Becomes Automated, Ihor Kovalenko Explains How to Keep the Musician',
+    date: 'May 13, 2026',
+    summary: 'On moving from music and live sound into corporate and enterprise AV without losing a musician’s ear.',
+    url: 'https://glidemagazine.com/325671/when-audio-becomes-automated-ihor-kovalenko-explains-how-to-keep-the-musician/',
+  },
+];
 
 export const experienceOrgs = ['Microsoft', 'Amazon', 'Apple', 'Airbnb', 'Sound Transit', 'Expedia', 'Boeing'];
 

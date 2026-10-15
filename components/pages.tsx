@@ -1,5 +1,6 @@
 import { PageIntro } from '@/components/ui';
 import { CertificationsSection } from '@/components/sections';
+import { AffiliationsSection, PressSection } from '@/components/recognition';
 import { FounderPath, FinalCTA } from '@/components/home';
 import { SelectedWork, Shot } from '@/components/photos';
 import { InquiryForm } from '@/components/inquiry-form';
@@ -30,14 +31,19 @@ export function AboutPage({ division }: { division: Division }) {
             {founder.role}
           </p>
           <p className="lead">
-            The founder’s path started in music and recording and moved into live sound and large corporate productions.
-            Over {experienceYears} years, that grew into commercial AV work: commissioning, DSP, control, networking and
-            troubleshooting.
+            Ihor came to audiovisual technology from music, not from IT or construction. Performing, recording and live
+            sound built the ear. Corporate events and enterprise commissioning built the engineering.
           </p>
           <p>
-            That mix matters. Understanding how audio, video and control systems work together, and how a live show
-            runs, means fewer surprises for you. The experience includes supporting projects and events for
-            organizations including {experienceOrgs.join(', ')} and public universities.
+            Over {experienceYears} years in audio and music, that grew into corporate event production with Encore
+            Global in Washington State, then into enterprise AV commissioning with AVI-SPL: commissioning, DSP, control,
+            networking and troubleshooting. Understanding how audio, video and control systems work together, and how a
+            live show runs, means fewer surprises for you.
+          </p>
+          <p>
+            The experience includes supporting projects and events for organizations including{' '}
+            {experienceOrgs.join(', ')} and public universities. It was gained in previous professional roles and does
+            not describe K4 AV Group client projects.
           </p>
           <p>
             K4 AV Group is small enough to be personal and experienced enough to handle serious AV work. You talk to the
@@ -48,7 +54,28 @@ export function AboutPage({ division }: { division: Division }) {
       <section className="container">
         <FounderPath />
       </section>
+      <section className="section container" id="approach">
+        <div className="intro-split">
+          <div>
+            <span className="eyebrow">Our approach</span>
+            <h2>From taste to repeatability.</h2>
+          </div>
+          <div>
+            <p className="lead">
+              A good ear matters. A professional system also has to work for another operator, another presenter and
+              another call tomorrow.
+            </p>
+            <ul className="check-list">
+              <li>Does every microphone behave the same way every time?</li>
+              <li>Does speech stay clear in the room and for the people on the far end?</li>
+              <li>Can another engineer reproduce the result from the documentation?</li>
+            </ul>
+          </div>
+        </div>
+      </section>
       <CertificationsSection />
+      <AffiliationsSection />
+      <PressSection />
       <SelectedWork
         items={[
           { photo: photos.roomGrand, caption: 'Boardroom with a wall display and table connectivity.' },
