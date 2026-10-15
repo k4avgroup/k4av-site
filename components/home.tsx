@@ -16,8 +16,8 @@ export function WhyUs() {
         </div>
         <div>
           <p className="lead">
-            Our founder has spent {experienceYears} years working at the top of the AV industry, supporting events and
-            systems for Fortune 500 companies.
+            Our founder brings {experienceYears} years in audio and music, and has spent recent years on corporate
+            events and enterprise AV systems across the Seattle area.
           </p>
           <p>
             Now we’re building our own company. We’re new, ambitious and keeping our prices fair, so you get the quality
@@ -90,6 +90,7 @@ export function FounderPath() {
           <Shot photo={step.photo} sizes="(max-width: 700px) 100vw, 25vw" />
           <span className="path-step">0{i + 1}</span>
           <h3>{step.title}</h3>
+          <p>{step.text}</p>
         </li>
       ))}
     </ol>
@@ -102,7 +103,7 @@ export function FounderStory() {
       <SectionHeading
         eyebrow="Our founder"
         title="Built on hands-on experience."
-        text={`${experienceYears} years in audio and AV, from recording and live sound to complex corporate events and commercial AV systems.`}
+        text={`${experienceYears} years in audio and music, from recording and live sound to complex corporate events and commercial AV systems.`}
       />
       <FounderPath />
       <div className="founder-note">
