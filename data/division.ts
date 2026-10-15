@@ -24,6 +24,19 @@ export const divisions: Record<
   },
 };
 
+// Which division the visitor is in, from the address. Null on the home page and on neutral pages (shop, privacy, ...).
+export function currentDivision(pathname: string): Division | null {
+  if (pathname === '/integration' || pathname.startsWith('/integration/')) return 'integration';
+  if (pathname === '/events' || pathname.startsWith('/events/')) return 'events';
+  return null;
+}
+
+// About, Contact and the quote form exist once per division, each in its own theme.
+// Shared links (the footer) use this to keep a visitor in the theme they came from. Outside a division they go to AV Integration.
+export function divisionPath(division: Division | null, page: 'about' | 'contact' | 'quote') {
+  return `/${division ?? 'integration'}/${page}`;
+}
+
 export type NavItem = { label: string; href: string };
 
 // Second navigation row under the division tabs. `main` links jump to sections of the division page

@@ -31,12 +31,14 @@ export const experienceYears = '20+';
 
 // Footer links. The header uses the two division tabs in data/division.ts.
 // Every link has an explicit address; hidden sections are kept out of this list, not deleted (see `features`).
-export const navigation = [
+// A link with `page` exists once per division: the footer swaps in the address of the division the visitor is in
+// (see `divisionPath`), and `href` is the AV Integration address used elsewhere.
+export const navigation: { label: string; href: string; page?: 'about' | 'contact' }[] = [
   { label: 'AV Integration', href: '/integration' },
   { label: 'Live Events', href: '/events' },
   { label: 'Rentals', href: '/events/rentals' },
-  { label: 'About', href: '/integration/about' },
-  { label: 'Contact', href: '/integration/contact' },
+  { label: 'About', href: '/integration/about', page: 'about' },
+  { label: 'Contact', href: '/integration/contact', page: 'contact' },
 ];
 
 // Switches for sections that exist in the code but are hidden from the public site for now.
