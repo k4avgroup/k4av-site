@@ -24,8 +24,7 @@ export function WhyUs() {
             you’d expect from a large integrator without the large-company price tag.
           </p>
           <p className="org-list">
-            Experience supporting projects and events for organizations including {experienceOrgs.join(', ')} and public
-            universities.
+            Experience supporting projects and events for organizations including {experienceOrgs.join(', ')}.
           </p>
         </div>
       </div>
@@ -90,7 +89,6 @@ export function FounderPath() {
           <Shot photo={step.photo} sizes="(max-width: 700px) 100vw, 25vw" />
           <span className="path-step">0{i + 1}</span>
           <h3>{step.title}</h3>
-          <p>{step.text}</p>
         </li>
       ))}
     </ol>

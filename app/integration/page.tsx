@@ -16,7 +16,7 @@ import { HowItWorks } from '@/components/how-it-works';
 import { Shot } from '@/components/photos';
 import { photos } from '@/data/photos';
 import { spaces, serviceGroups, platformGroups, integrationExperience, divisions } from '@/data/division';
-import { experienceYears, experienceOrgs } from '@/data/site';
+import { experienceYears, integrationOrgs } from '@/data/site';
 import { pageMetadata } from '@/lib/metadata';
 
 export const metadata = pageMetadata(
@@ -122,8 +122,8 @@ export default function Integration() {
         note={
           <>
             Experience supporting enterprise AV environments, including projects for organizations such as{' '}
-            {experienceOrgs.join(', ')} and public universities. This experience was gained in previous professional
-            roles and does not describe K4 AV Group client projects.
+            {integrationOrgs.join(', ')}. This experience was gained in previous professional roles and does not
+            describe K4 AV Group client projects.
           </>
         }
       />

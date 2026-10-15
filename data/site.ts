@@ -144,27 +144,19 @@ export const whyPoints = [
   },
 ];
 
-export const founderPath: { title: string; text: string; photo: Photo }[] = [
-  {
-    title: 'Recording and live sound',
-    text: 'Performing, recording, mixing and live sound: the ear that everything else is built on.',
-    photo: photos.liveBand,
-  },
-  {
-    title: 'Corporate live events',
-    text: 'FOH, A1 and audio lead on corporate productions in Washington, where there is no second take.',
-    photo: photos.ballroomConsole,
-  },
-  {
-    title: 'AV systems and commissioning',
-    text: 'Enterprise commissioning: taking conference rooms from installed to tuned, tested and documented.',
-    photo: photos.racksBlue,
-  },
-  {
-    title: 'K4 AV Group',
-    text: 'Founded in 2026: live event support and AV engineering from one accountable person.',
-    photo: photos.founderConsole,
-  },
+export const founderPath: { title: string; photo: Photo }[] = [
+  { title: 'Recording and live sound', photo: photos.liveBand },
+  { title: 'Corporate live events', photo: photos.ballroomConsole },
+  { title: 'AV systems and commissioning', photo: photos.racksBlue },
+  { title: 'K4 AV Group', photo: photos.founderConsole },
+];
+
+// Four facts under the founder text on About. Keep them short and checkable.
+export const founderFacts: { value: string; label: string }[] = [
+  { value: `${experienceYears} years`, label: 'in audio and music' },
+  { value: '50+ events', label: 'led at Encore, crews of five to six' },
+  { value: 'AVIXA CTS', label: 'plus Dante, Q-SYS, Biamp, Extron' },
+  { value: 'IEEE Senior Member', label: 'AES member, SkillsUSA judge' },
 ];
 
 // TODO(owner): confirm each name. Shown as experience ("supporting projects and events for"), never as logos
@@ -192,25 +184,56 @@ export const affiliations: { kind: string; name: string; detail: string }[] = [
 
 // Coverage of the founder’s work. Both pieces appeared while he worked at AVI-SPL and do not mention K4 AV Group,
 // so the page says so. Titles are the outlets’ own; the summaries are ours.
-export const press: { outlet: string; title: string; date: string; summary: string; url: string }[] = [
+export const press: { outlet: string; title: string; date: string; url: string }[] = [
   {
     outlet: 'Tech Times',
     title: 'Meetings Are Now Data, and if the Input Wobbles, Everything Does',
-    date: 'April 16, 2026',
-    summary:
-      'Why steady microphone input and DSP decide how well AI-assisted meetings work, with enterprise conferencing commissioning as the example.',
+    date: 'April 2026',
     url: 'https://www.techtimes.com/articles/315924/20260416/meetings-are-now-data-if-input-wobbles-everything-does.htm',
   },
   {
     outlet: 'Glide Magazine',
     title: 'When Audio Becomes Automated, Ihor Kovalenko Explains How to Keep the Musician',
-    date: 'May 13, 2026',
-    summary: 'On moving from music and live sound into corporate and enterprise AV without losing a musician’s ear.',
+    date: 'May 2026',
     url: 'https://glidemagazine.com/325671/when-audio-becomes-automated-ihor-kovalenko-explains-how-to-keep-the-musician/',
   },
 ];
 
-export const experienceOrgs = ['Microsoft', 'Amazon', 'Apple', 'Airbnb', 'Sound Transit', 'Expedia', 'Boeing'];
+// Organizations the founder supported in earlier roles (Encore Global for events, AVI-SPL for commissioning).
+// The owner confirmed that none of these names is covered by an NDA. They are shown as experience ("supporting
+// projects and events for"), never as logos and never as K4 AV Group clients. Names come from his LinkedIn posts,
+// the Tech Times and Glide articles, his résumé and the Encore recommendation letter.
+export const eventOrgs = ['Amazon', 'Microsoft', 'Boeing', 'Alaska Airlines', 'Snowflake', 'Workato', 'Apptio'];
+export const integrationOrgs = [
+  'Microsoft',
+  'Apple',
+  'Amazon',
+  'Airbnb',
+  'Uber',
+  'F5',
+  'Boeing',
+  'Nike',
+  'University of Washington',
+  'City of Port Angeles',
+  'Columbia Bank',
+];
+// Home and About: everything above plus the names the owner gave earlier.
+export const experienceOrgs = [
+  'Microsoft',
+  'Amazon',
+  'Apple',
+  'Boeing',
+  'Airbnb',
+  'Alaska Airlines',
+  'Uber',
+  'F5',
+  'Snowflake',
+  'Nike',
+  'Expedia',
+  'Sound Transit',
+  'University of Washington',
+  'City of Port Angeles',
+];
 
 // Rental categories we plan to offer. Add real equipment to `equipment` in data/catalog.ts.
 export const rentalCategories = [
