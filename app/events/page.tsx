@@ -48,7 +48,7 @@ export default function Events() {
               presentation systems work the first time.
             </p>
             <p>We can support one technician, a technical department or a complete AV production.</p>
-            <Link className="text-link" href="/about">
+            <Link className="text-link" href="/events/about">
               About the founder
             </Link>
           </div>

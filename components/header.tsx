@@ -3,14 +3,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { ArrowUpRight } from 'lucide-react';
-import { divisions, type Division } from '@/data/division';
+import { currentDivision, divisions, type Division } from '@/data/division';
 import { Logo } from './logo';
-
-function currentDivision(pathname: string): Division | null {
-  if (pathname === '/integration' || pathname.startsWith('/integration/')) return 'integration';
-  if (pathname === '/events' || pathname.startsWith('/events/')) return 'events';
-  return null;
-}
 
 export function Header() {
   const pathname = usePathname();

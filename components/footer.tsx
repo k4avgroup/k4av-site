@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { navigation, site, features } from '@/data/site';
+import { site } from '@/data/site';
+import { FooterLinks } from './footer-links';
 import { Logo } from './logo';
 
 export function Footer() {
@@ -19,24 +20,7 @@ export function Footer() {
             Travel available for projects.
           </span>
         </div>
-        <div>
-          <span className="eyebrow">Explore</span>
-          <div className="footer-links">
-            {navigation.map(({ label, href }) => (
-              <Link key={href} href={href}>
-                {label}
-              </Link>
-            ))}
-          </div>
-        </div>
-        <div>
-          <span className="eyebrow">Start a conversation</span>
-          <Link className="text-link" href="/quote">
-            Request a Quote ↗
-          </Link>
-          <Link href="/integration/contact">Contact us</Link>
-          {features.clientLogin && <Link href="/login">Client login</Link>}
-        </div>
+        <FooterLinks />
       </div>
       <div className="container footer-bottom">
         <span>© {new Date().getFullYear()} K4 AV Group</span>
