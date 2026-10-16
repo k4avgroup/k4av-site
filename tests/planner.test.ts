@@ -9,6 +9,8 @@ import {
   encodePlan,
   normalizePlan,
   planSummary,
+  presenterSpot,
+  rules,
   tableSize,
 } from '../lib/planner/model.ts';
 
@@ -75,7 +77,7 @@ test('cameras, panels and controls follow the choices', () => {
   assert.equal(analyze(plan({ cameras: 'none' })).gear.cameras.length, 0);
   assert.equal(analyze(plan({ cameras: 'one' })).gear.cameras.length, 1);
   assert.equal(analyze(plan({ cameras: 'two' })).gear.cameras.length, 2);
-  assert.equal(analyze(plan({ cameras: 'four' })).gear.cameras.length, 4);
+  assert.equal(analyze(plan({ cameras: 'three' })).gear.cameras.length, 3);
   assert.equal(analyze(plan({ tablePanels: false })).gear.panels.length, 0);
   assert.ok(analyze(plan({ tablePanels: true, seats: 14 })).gear.panels.length >= 2);
   assert.equal(analyze(plan({ control: 'none' })).gear.control, null);
@@ -109,13 +111,24 @@ test('packages are complete starting points that keep the room and the table', (
   assert.equal(essential.length, 9);
   assert.equal(essential.seats, 12);
   assert.equal(essential.cameras, 'one');
-  assert.equal(premium.cameras, 'four');
+  assert.equal(premium.cameras, 'three');
   assert.equal(premium.displays, 2);
   assert.ok(analyze(premium).items.length > analyze(essential).items.length - 1);
 });
 
 test('a plan survives the trip through a link, and bad links are repaired or refused', () => {
-  const original = plan({ unit: 'ft', length: 10.5, seats: 14, shape: 'round', speakers: 'ceiling', displaySize: 75 });
+  const original = plan({
+    unit: 'ft',
+    length: 10.5,
+    seats: 14,
+    shape: 'round',
+    speakers: 'ceiling',
+    displaySize: 75,
+    presenterX: 1.25,
+    presenterZ: -1.5,
+    cameraSpot: 'below',
+    micShape: 'round',
+  });
   assert.deepEqual(decodePlan(encodePlan(original)), original);
   assert.equal(decodePlan('not a plan'), null);
   assert.equal(decodePlan(encodePlan(defaultPlan) + 'zzzz'), null);
@@ -132,4 +145,80 @@ test('the request summary starts with the link and stays short', () => {
   assert.ok(text.startsWith('Room planner (pilot): https://k4av.com/integration/planner#p=abc'));
   assert.ok(text.length <= 900);
   assert.ok(text.includes('display'));
+});
+
+test('one camera sits on the centre line, above the display or below it at eye level', () => {
+  const above = analyze(plan({ cameras: 'one', cameraSpot: 'above' }));
+  const below = analyze(plan({ cameras: 'one', cameraSpot: 'below' }));
+  const top = above.displays.centerY + above.displays.height / 2;
+  assert.equal(above.gear.cameras.length, 1);
+  assert.equal(above.gear.cameras[0].pos[0], 0);
+  assert.ok(above.gear.cameras[0].pos[1] > top);
+  const bottom = below.displays.centerY - below.displays.height / 2;
+  assert.equal(below.gear.cameras[0].pos[0], 0);
+  assert.ok(below.gear.cameras[0].pos[1] < bottom);
+  assert.ok(below.gear.cameras[0].pos[1] >= 1 && below.gear.cameras[0].pos[1] <= 1.3, 'near seated eye level');
+  assert.ok(below.displays.centerY > above.displays.centerY, 'the display is raised to make room');
+});
+
+test('two cameras flank the display; a third at the back follows the presenter', () => {
+  const twoPlan = analyze(plan({ cameras: 'two' }));
+  const two = twoPlan.gear.cameras;
+  assert.equal(two.length, 2);
+  assert.equal(two[0].pos[0], -two[1].pos[0]);
+  assert.ok(Math.abs(two[1].pos[0]) > twoPlan.displays.width / 2);
+  const here = plan({ cameras: 'three', presenter: true, presenterX: -1, presenterZ: -2 });
+  const moved = plan({ cameras: 'three', presenter: true, presenterX: 1.5, presenterZ: 0 });
+  const rearA = analyze(here).gear.cameras[2];
+  const rearB = analyze(moved).gear.cameras[2];
+  assert.equal(analyze(here).gear.cameras.length, 3);
+  assert.ok(rearA.pos[2] > 0, 'on the back wall');
+  assert.equal(rearA.target[0], -1);
+  assert.equal(rearA.target[2], -2);
+  assert.equal(rearB.target[0], 1.5);
+  assert.ok(rearA.hfov < two[0].hfov, 'zoomed in on the presenter');
+});
+
+test('the presenter can be moved but not through walls or into the display wall', () => {
+  const beside = presenterSpot(plan(), analyze(plan()).displays);
+  assert.ok(beside.x < 0 && beside.z < -2);
+  const moved = plan({ presenter: true, presenterX: 1.2, presenterZ: 0.5 });
+  assert.deepEqual(presenterSpot(moved, analyze(moved).displays), { x: 1.2, z: 0.5 });
+  const wild = plan({ presenterX: 99, presenterZ: -99 });
+  assert.equal(wild.presenterX, 2.7);
+  assert.equal(wild.presenterZ, -3.6);
+  assert.equal(plan({ presenterX: 'left' }).presenterX, null);
+  const small = plan({ width: 3, length: 3, presenterX: 2, presenterZ: 2 });
+  assert.equal(small.presenterX, 1.2);
+  assert.equal(small.presenterZ, 1.2);
+});
+
+test('ceiling microphone arrays are sized like the Shure MXA920, square or round', () => {
+  const find = (shape: string) =>
+    analyze(plan({ mics: 'ceiling', micShape: shape })).items.find((i) => i.name.includes('microphone'));
+  assert.ok(find('square')?.name.includes('square') && find('square')?.name.includes('604 mm'));
+  assert.ok(find('round')?.name.includes('round') && find('round')?.name.includes('635 mm'));
+  assert.equal(rules.micArray.square.size, 0.604);
+  assert.equal(rules.micArray.round.size, 0.635);
+  assert.equal(normalizePlan({ micShape: 'hexagon' }).micShape, 'square');
+});
+
+test('no ceiling speaker hangs where the microphone array is', () => {
+  for (const seats of [4, 8, 14, 20]) {
+    for (const [length, width] of [
+      [6, 5],
+      [8, 6],
+      [11, 8],
+    ]) {
+      const gear = analyze(plan({ speakers: 'ceiling', mics: 'ceiling', seats, length, width })).gear;
+      assert.ok(
+        gear.speakers.every((s) => Math.abs(s[0]) > 0.4),
+        `${seats} seats in ${length} x ${width}`,
+      );
+    }
+  }
+});
+
+test('old links with four cameras open with three', () => {
+  assert.equal(normalizePlan({ cameras: 'four' }).cameras, 'three');
 });

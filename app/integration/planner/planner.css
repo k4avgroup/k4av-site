@@ -187,6 +187,15 @@
   color: var(--muted);
   font-size: var(--type-small);
 }
+.planner-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
 .planner-presets {
   display: grid;
   gap: 8px;

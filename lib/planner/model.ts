@@ -11,7 +11,9 @@ export type TableShape = 'rect' | 'round';
 export type TablePosition = 'center' | 'back' | 'front';
 export type Speakers = 'none' | 'soundbar' | 'front' | 'ceiling';
 export type Mics = 'none' | 'integrated' | 'table' | 'ceiling';
-export type Cameras = 'none' | 'one' | 'two' | 'four';
+export type Cameras = 'none' | 'one' | 'two' | 'three';
+export type CameraSpot = 'above' | 'below';
+export type MicShape = 'square' | 'round';
 export type Control = 'none' | 'table' | 'wall';
 export type RoomSystem = 'byod' | 'teams' | 'zoom' | 'webex' | 'meet';
 export type Preset = 'essential' | 'standard' | 'premium';
@@ -28,6 +30,8 @@ export type Plan = {
   position: TablePosition;
   endChairs: boolean;
   presenter: boolean;
+  presenterX: number | null; // where the presenter was dragged to; null means beside the display
+  presenterZ: number | null;
   displays: 1 | 2;
   displaySize: number | null;
   readability: number;
@@ -35,8 +39,10 @@ export type Plan = {
   speakerCones: boolean;
   listeningPlane: boolean;
   mics: Mics;
+  micShape: MicShape; // ceiling microphone arrays come square or round
   micCoverage: boolean;
   cameras: Cameras;
+  cameraSpot: CameraSpot; // a single camera sits above or below the display
   cameraView: boolean;
   tablePanels: boolean;
   control: Control;
@@ -67,6 +73,12 @@ export const rules = {
   micArrayEvery: 4.8, // metres of table per ceiling microphone array
   tableMicEvery: 3, // seats per table microphone
   panelEvery: 2.4, // metres of table per connection panel
+  displayBottomOverCamera: 1.4, // a camera under the display sits near seated eye level (1.2 m)
+  // Ceiling arrays, sized like the Shure MXA920 (spec sheet): square 603.8 mm, round 635.4 mm, 55 to 61 mm deep.
+  micArray: {
+    square: { size: 0.604, depth: 0.055 },
+    round: { size: 0.635, depth: 0.061 },
+  },
 } as const;
 
 export const defaultPlan: Plan = {
@@ -80,6 +92,8 @@ export const defaultPlan: Plan = {
   position: 'center',
   endChairs: false,
   presenter: false,
+  presenterX: null,
+  presenterZ: null,
   displays: 1,
   displaySize: null,
   readability: 0.5,
@@ -87,8 +101,10 @@ export const defaultPlan: Plan = {
   speakerCones: false,
   listeningPlane: false,
   mics: 'ceiling',
+  micShape: 'square',
   micCoverage: false,
   cameras: 'one',
+  cameraSpot: 'above',
   cameraView: false,
   tablePanels: true,
   control: 'table',
@@ -108,16 +124,36 @@ const oneOf = <T extends string>(v: unknown, allowed: readonly T[], fallback: T)
 const num = (v: unknown, lo: number, hi: number, fallback: number) =>
   typeof v === 'number' && Number.isFinite(v) ? clamp(v, lo, hi) : fallback;
 const bool = (v: unknown, fallback: boolean) => (typeof v === 'boolean' ? v : fallback);
+const spot = (v: unknown, lo: number, hi: number) =>
+  typeof v === 'number' && Number.isFinite(v) ? round2(clamp(v, lo, hi)) : null;
+
+// How far a presenter can walk: not through the walls, and not into the display wall.
+export const presenterRange = (width: number, length: number) => ({
+  x: [-width / 2 + 0.3, width / 2 - 0.3] as const,
+  z: [-length / 2 + 0.4, length / 2 - 0.3] as const,
+});
+
+// Where the presenter stands: the dragged spot, or beside the display until they are moved.
+export function presenterSpot(plan: Plan, displays: { count: 1 | 2; width: number }) {
+  const range = presenterRange(plan.width, plan.length);
+  const beside = displays.count === 2 ? -(displays.width + 0.4) : -(displays.width / 2 + 0.7);
+  return {
+    x: plan.presenterX ?? clamp(beside, ...range.x),
+    z: plan.presenterZ ?? range.z[0] + 0.6,
+  };
+}
 
 // Clamps and repairs a plan, so anything that arrives from the address bar is safe to use.
 export function normalizePlan(input: Partial<Record<keyof Plan, unknown>> = {}): Plan {
   const d = defaultPlan;
   const shape = oneOf(input.shape, ['rect', 'round'] as const, d.shape);
   const seats = Math.round(num(input.seats, limits.seats[0], limits.seats[1], d.seats));
+  const length = round2(num(input.length, limits.length[0], limits.length[1], d.length));
+  const width = round2(num(input.width, limits.width[0], limits.width[1], d.width));
   return {
     unit: oneOf(input.unit, ['m', 'ft'] as const, d.unit),
-    length: round2(num(input.length, limits.length[0], limits.length[1], d.length)),
-    width: round2(num(input.width, limits.width[0], limits.width[1], d.width)),
+    length,
+    width,
     height: round2(num(input.height, limits.height[0], limits.height[1], d.height)),
     ceiling: bool(input.ceiling, d.ceiling),
     shape,
@@ -125,6 +161,8 @@ export function normalizePlan(input: Partial<Record<keyof Plan, unknown>> = {}):
     position: oneOf(input.position, ['center', 'back', 'front'] as const, d.position),
     endChairs: bool(input.endChairs, d.endChairs),
     presenter: bool(input.presenter, d.presenter),
+    presenterX: spot(input.presenterX, ...presenterRange(width, length).x),
+    presenterZ: spot(input.presenterZ, ...presenterRange(width, length).z),
     displays: input.displays === 2 ? 2 : 1,
     displaySize:
       typeof input.displaySize === 'number' && (rules.sizes as readonly number[]).includes(input.displaySize)
@@ -135,8 +173,14 @@ export function normalizePlan(input: Partial<Record<keyof Plan, unknown>> = {}):
     speakerCones: bool(input.speakerCones, d.speakerCones),
     listeningPlane: bool(input.listeningPlane, d.listeningPlane),
     mics: oneOf(input.mics, ['none', 'integrated', 'table', 'ceiling'] as const, d.mics),
+    micShape: oneOf(input.micShape, ['square', 'round'] as const, d.micShape),
     micCoverage: bool(input.micCoverage, d.micCoverage),
-    cameras: oneOf(input.cameras, ['none', 'one', 'two', 'four'] as const, d.cameras),
+    cameras: oneOf(
+      input.cameras === 'four' ? 'three' : input.cameras,
+      ['none', 'one', 'two', 'three'] as const,
+      d.cameras,
+    ),
+    cameraSpot: oneOf(input.cameraSpot, ['above', 'below'] as const, d.cameraSpot),
     cameraView: bool(input.cameraView, d.cameraView),
     tablePanels: bool(input.tablePanels, d.tablePanels),
     control: oneOf(input.control, ['none', 'table', 'wall'] as const, d.control),
@@ -238,7 +282,9 @@ export function computeDisplays(plan: Plan, layout: Layout): DisplayInfo {
   const size = plan.displaySize ?? recommended;
   const height = round2(size * 0.01245);
   const width = round2(size * 0.02214);
-  const lo = rules.displayBottomMin + height / 2;
+  const bottomMin =
+    plan.cameras === 'one' && plan.cameraSpot === 'below' ? rules.displayBottomOverCamera : rules.displayBottomMin;
+  const lo = bottomMin + height / 2;
   const hi = plan.height - 0.25 - height / 2;
   const centerY = round2(Math.min(hi, Math.max(lo, rules.displayCenterHeight)));
   const gap = 0.12;
@@ -260,7 +306,12 @@ export function computeDisplays(plan: Plan, layout: Layout): DisplayInfo {
 
 // ---------------------------------------------------------------- audio, cameras and accessories
 
-export type CameraSpec = { pos: Vec3; target: Vec3; hfov: number; vfov: number };
+export type CameraSpec = {
+  pos: Vec3;
+  target: Vec3;
+  hfov: number;
+  vfov: number;
+};
 export type Equipment = {
   speakers: Vec3[];
   speakerTargets: Vec3[];
@@ -298,7 +349,8 @@ export function computeEquipment(plan: Plan, layout: Layout, d: DisplayInfo): Eq
     const spacing = speakerRadius * 1.41;
     const zoneW = Math.min(W - 0.4, t.width + 2.4);
     const zoneL = Math.min(L - 0.4, t.length + 2.0 + (layout.endChairs ? 1.4 : 0));
-    const nx = Math.max(1, Math.ceil(zoneW / spacing));
+    let nx = Math.max(1, Math.ceil(zoneW / spacing));
+    if (plan.mics === 'ceiling' && nx % 2 === 1) nx += 1; // no speaker on the centre line, where the microphone array hangs
     const nz = Math.max(2, Math.ceil(zoneL / spacing));
     for (let i = 0; i < nx; i++) {
       for (let j = 0; j < nz; j++) {
@@ -325,38 +377,36 @@ export function computeEquipment(plan: Plan, layout: Layout, d: DisplayInfo): Eq
     micRadius = 4.5;
   }
 
+  // Common PTZ placements: one on the centre line of the display (above it, or below it at eye level),
+  // two beside the display, and a third at the back of the room that follows the presenter.
+  // The front cameras are modelled on the Q-SYS NC-12x80 (12x zoom, 80 degrees at the wide end), the back one on
+  // the NC-20x60 (20x zoom, 60 degrees wide), zoomed in on the presenter.
   const target: Vec3 = [0, 1.1, t.z];
   const cameras: CameraSpec[] = [];
-  const camY = Math.min(H - 0.3, displayTop + 0.14);
+  const sideY = round2(clamp(d.centerY - 0.2, 1.3, H - 0.3));
+  const sideX = round2(Math.min(W / 2 - 0.3, totalW / 2 + (plan.speakers === 'front' ? 0.85 : 0.45)));
   if (plan.cameras === 'one') {
-    cameras.push({ pos: [0, round2(camY), frontZ + 0.12], target, hfov: 110, vfov: 65 });
-  } else if (plan.cameras === 'two') {
+    const y = plan.cameraSpot === 'below' ? Math.max(0.6, displayBottom - 0.2) : Math.min(H - 0.3, displayTop + 0.22);
+    cameras.push({ pos: [0, round2(y), frontZ + 0.12], target, hfov: 80, vfov: 50 });
+  } else if (plan.cameras === 'two' || plan.cameras === 'three') {
     for (const sx of [-1, 1]) {
       cameras.push({
-        pos: [round2(sx * (totalW / 2 + 0.55)), round2(Math.min(H - 0.3, 2.0)), frontZ + 0.12],
+        pos: [round2(sx * sideX), sideY, frontZ + 0.12],
         target: [0, 1.1, round2(t.z + t.length * 0.2)],
         hfov: 80,
         vfov: 50,
       });
     }
-  } else if (plan.cameras === 'four') {
-    for (const sx of [-1, 1]) {
-      cameras.push({
-        pos: [round2(sx * (W / 2 - 0.25)), round2(Math.min(H - 0.3, 2.1)), frontZ + 0.15],
-        target: [0, 1.1, t.z],
-        hfov: 85,
-        vfov: 55,
-      });
-    }
-    cameras.push({ pos: [0, round2(H - 0.1), t.z], target: [0, 0.8, t.z], hfov: 100, vfov: 70 });
+  }
+  if (plan.cameras === 'three') {
+    const at = presenterSpot(plan, d);
     cameras.push({
-      pos: [0, round2(Math.min(H - 0.3, 2.0)), L / 2 - 0.15],
-      target: [0, 1.5, frontZ + 0.5],
-      hfov: 85,
-      vfov: 55,
+      pos: [0, round2(Math.min(H - 0.3, 2.2)), round2(L / 2 - 0.15)],
+      target: [at.x, 1.45, at.z],
+      hfov: 30,
+      vfov: 17,
     });
   }
-
   const panels: Vec3[] = [];
   if (plan.tablePanels) {
     const n = Math.max(1, Math.ceil(t.length / rules.panelEvery));
@@ -402,7 +452,14 @@ export function analyze(plan: Plan): Analysis {
   if (plan.speakers === 'soundbar') items.push({ name: 'Soundbar', qty: 1 });
   if (plan.speakers === 'front') items.push({ name: 'Wall speakers beside the display', qty: 2 });
   if (plan.speakers === 'ceiling') items.push({ name: 'Ceiling speakers', qty: gear.speakers.length });
-  if (plan.mics === 'ceiling') items.push({ name: 'Ceiling microphone array', qty: gear.mics.length });
+  if (plan.mics === 'ceiling')
+    items.push({
+      name:
+        plan.micShape === 'round'
+          ? 'Ceiling microphone array, round 25 in (635 mm)'
+          : 'Ceiling microphone array, square 24 in (604 mm)',
+      qty: gear.mics.length,
+    });
   if (plan.mics === 'table') items.push({ name: 'Table microphones', qty: gear.mics.length });
   if (plan.mics === 'integrated') items.push({ name: 'Microphones built into the bar or camera', qty: 1 });
   const ceilingDevices =
@@ -410,14 +467,19 @@ export function analyze(plan: Plan): Analysis {
   if (plan.mics === 'ceiling' || plan.mics === 'table' || plan.speakers === 'ceiling') {
     items.push({ name: 'Audio processor (echo cancellation and mixing)', qty: 1 });
   }
-  if (ceilingDevices > 0) items.push({ name: 'Network switch with PoE for ceiling devices', qty: 1 });
-  if (plan.cameras === 'one') items.push({ name: 'Wide-angle conferencing camera', qty: 1 });
-  if (plan.cameras === 'two') items.push({ name: 'Conferencing cameras with automatic switching', qty: 2 });
-  if (plan.cameras === 'four')
+  if (ceilingDevices + gear.cameras.length > 0)
     items.push({
-      name: 'Cameras with automatic switching',
-      qty: 4,
-      note: 'Two front corners, one above the table, one at the back.',
+      name: 'Network switch with PoE',
+      qty: 1,
+      note: 'Powers the ceiling devices and the PTZ cameras over one cable each.',
+    });
+  if (plan.cameras === 'one') items.push({ name: 'PTZ camera, 12x zoom, 80° wide view', qty: 1 });
+  if (plan.cameras === 'two') items.push({ name: 'PTZ cameras, 12x zoom, with automatic switching', qty: 2 });
+  if (plan.cameras === 'three')
+    items.push({
+      name: 'PTZ cameras with automatic switching',
+      qty: 3,
+      note: 'Two beside the display (12x zoom, 80° wide view) and one at the back (20x zoom) that follows the presenter.',
     });
   if (gear.panels.length) items.push({ name: 'Table connection panel', qty: gear.panels.length });
   if (plan.control === 'table') items.push({ name: 'Touch panel on the table', qty: 1 });
@@ -486,7 +548,7 @@ export function applyPreset(plan: Plan, preset: Preset): Plan {
     displays: 2,
     speakers: 'ceiling',
     mics: 'ceiling',
-    cameras: 'four',
+    cameras: 'three',
     tablePanels: true,
     control: 'table',
   });
@@ -518,6 +580,10 @@ const KEYS = [
   'tablePanels',
   'control',
   'system',
+  'presenterX',
+  'presenterZ',
+  'cameraSpot',
+  'micShape',
 ] as const satisfies readonly (keyof Plan)[];
 
 export function encodePlan(plan: Plan): string {

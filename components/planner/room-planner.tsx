@@ -162,9 +162,9 @@ function Count({
 }
 
 const presetText: Record<Preset, string> = {
-  essential: 'Soundbar, built-in microphones, one camera',
-  standard: 'Wall speakers, ceiling microphones, two cameras, touch panel',
-  premium: 'Two displays, ceiling audio, four cameras, touch panel',
+  essential: 'Soundbar, built-in microphones, one PTZ camera',
+  standard: 'Wall speakers, ceiling microphones, two PTZ cameras, touch panel',
+  premium: 'Two displays, ceiling audio, three PTZ cameras, touch panel',
 };
 
 // A plan can arrive in the address (#p=...), for example from a shared link. This component only runs in the browser.
@@ -201,6 +201,10 @@ export default function RoomPlanner() {
       cameraView: plan.cameraView && step === 4,
     }),
     [plan, step],
+  );
+  const movePresenter = useCallback(
+    (x: number, z: number) => setPlan((p) => normalizePlan({ ...p, presenterX: x, presenterZ: z })),
+    [],
   );
   const onReady = useCallback((fn: Capture) => {
     capture.current = fn;
@@ -325,11 +329,21 @@ export default function RoomPlanner() {
                   onChange={(v) => set('endChairs', v)}
                 />
               )}
-              <Check
-                label="Show a presenter at the display"
-                checked={plan.presenter}
-                onChange={(v) => set('presenter', v)}
-              />
+              <Check label="Show a presenter" checked={plan.presenter} onChange={(v) => set('presenter', v)} />
+              {plan.presenter && (
+                <p className="planner-hint">
+                  Drag the presenter in the 3D view to move them.{' '}
+                  {(plan.presenterX !== null || plan.presenterZ !== null) && (
+                    <button
+                      type="button"
+                      className="planner-link"
+                      onClick={() => setPlan((p) => normalizePlan({ ...p, presenterX: null, presenterZ: null }))}
+                    >
+                      Back to the display
+                    </button>
+                  )}
+                </p>
+              )}
               <p className="planner-hint">
                 The table is sized for you: {formatLength(tableDim.length, u)} × {formatLength(tableDim.width, u)}.
               </p>
@@ -422,6 +436,17 @@ export default function RoomPlanner() {
                 ]}
                 onChange={(v) => set('mics', v)}
               />
+              {plan.mics === 'ceiling' && (
+                <Seg
+                  label="Array shape"
+                  value={plan.micShape}
+                  options={[
+                    { value: 'square', label: 'Square' },
+                    { value: 'round', label: 'Round' },
+                  ]}
+                  onChange={(v) => set('micShape', v)}
+                />
+              )}
               <Check
                 label="Show where voices are picked up"
                 checked={plan.micCoverage}
@@ -429,7 +454,8 @@ export default function RoomPlanner() {
               />
               <p className="planner-hint">
                 {plan.speakers === 'ceiling' && `${gear.speakers.length} ceiling speakers. `}
-                {plan.mics === 'ceiling' && `${gear.mics.length} microphone array${gear.mics.length > 1 ? 's' : ''}. `}
+                {plan.mics === 'ceiling' &&
+                  `${gear.mics.length} microphone array${gear.mics.length > 1 ? 's' : ''}, ${plan.micShape === 'round' ? 'round 25 in (635 mm)' : 'square 24 in (604 mm)'}, sized like the Shure MXA920. `}
                 {plan.mics === 'table' && `${gear.mics.length} table microphones. `}
                 Coverage is a simplified sketch, not an acoustic simulation.
               </p>
@@ -440,16 +466,27 @@ export default function RoomPlanner() {
             <>
               <h2>Video</h2>
               <Seg
-                label="Cameras"
+                label="PTZ cameras"
                 value={plan.cameras}
                 options={[
                   { value: 'none', label: 'None' },
                   { value: 'one', label: 'One' },
                   { value: 'two', label: 'Two' },
-                  { value: 'four', label: 'Four' },
+                  { value: 'three', label: 'Three' },
                 ]}
                 onChange={(v) => set('cameras', v)}
               />
+              {plan.cameras === 'one' && (
+                <Seg
+                  label="Camera position"
+                  value={plan.cameraSpot}
+                  options={[
+                    { value: 'above', label: 'Above the display' },
+                    { value: 'below', label: 'Below the display' },
+                  ]}
+                  onChange={(v) => set('cameraSpot', v)}
+                />
+              )}
               <Check
                 label="Show what the cameras see"
                 checked={plan.cameraView}
@@ -457,11 +494,15 @@ export default function RoomPlanner() {
               />
               <p className="planner-hint">
                 {plan.cameras === 'none' && 'No camera: the room is not seen by remote people.'}
-                {plan.cameras === 'one' && 'One wide camera above the display sees the whole table.'}
+                {plan.cameras === 'one' &&
+                  (plan.cameraSpot === 'above'
+                    ? 'One PTZ camera on the centre line above the display: the usual choice, and it works for most rooms.'
+                    : 'One PTZ camera on the centre line below the display, close to seated eye level. The display is mounted higher to make room for it.')}
                 {plan.cameras === 'two' &&
-                  'Two cameras on both sides of the display; the system switches between them.'}
-                {plan.cameras === 'four' &&
-                  'Two front corners, one above the table and one at the back, with automatic switching.'}
+                  'Two PTZ cameras on both sides of the display, aimed across the table so the system can pick the face-on view of whoever speaks.'}
+                {plan.cameras === 'three' &&
+                  'Two PTZ cameras beside the display and a third at the back of the room that follows the presenter. Show a presenter on the Layout step and drag them to see the camera turn.'}
+                {plan.cameras !== 'none' && ' Sized like the Q-SYS NC-12x80: 170 × 201 × 142 mm.'}{' '}
               </p>
             </>
           )}
@@ -577,7 +618,13 @@ export default function RoomPlanner() {
       </div>
 
       <div className="planner-stage">
-        <PlannerScene plan={scenePlan} analysis={analysis} view={view} onReady={onReady} />
+        <PlannerScene
+          plan={scenePlan}
+          analysis={analysis}
+          view={view}
+          onReady={onReady}
+          onPresenterMove={movePresenter}
+        />
         <div className="planner-views" role="group" aria-label="Camera view">
           <button type="button" onClick={() => show('iso')}>
             3D

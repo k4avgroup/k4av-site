@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useMemo, useRef } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
 import {
   BufferGeometry,
   CanvasTexture,
@@ -8,14 +8,17 @@ import {
   EdgesGeometry,
   Float32BufferAttribute,
   Matrix4,
+  Plane,
   PlaneGeometry,
   Quaternion,
+  Raycaster,
   SRGBColorSpace,
+  Vector2,
   Vector3,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { Analysis, CameraSpec, Plan, Vec3 } from '@/lib/planner/model';
-import { rules } from '@/lib/planner/model';
+import { presenterRange, presenterSpot, rules } from '@/lib/planner/model';
 
 export type ViewName = 'iso' | 'top' | 'front' | 'side';
 export type ViewState = { name: ViewName; nonce: number };
@@ -42,7 +45,7 @@ function facing(from: Vec3, to: Vec3) {
 }
 
 function Controls({ plan, view }: { plan: Plan; view: ViewState }) {
-  const { camera, gl, invalidate } = useThree();
+  const { camera, gl, invalidate, set } = useThree();
   const controls = useRef<OrbitControls | null>(null);
   const planRef = useRef(plan);
   useEffect(() => {
@@ -57,6 +60,7 @@ function Controls({ plan, view }: { plan: Plan; view: ViewState }) {
     const onChange = () => invalidate();
     c.addEventListener('change', onChange);
     controls.current = c;
+    set({ controls: c });
     const pose = viewPose(planRef.current, 'iso');
     camera.position.set(...pose.position);
     c.target.set(...pose.target);
@@ -66,8 +70,9 @@ function Controls({ plan, view }: { plan: Plan; view: ViewState }) {
       c.removeEventListener('change', onChange);
       c.dispose();
       controls.current = null;
+      set({ controls: null });
     };
-  }, [camera, gl, invalidate]);
+  }, [camera, gl, invalidate, set]);
 
   useEffect(() => {
     const c = controls.current;
@@ -304,17 +309,144 @@ function Display({
   );
 }
 
-function Presenter({ x, z }: { x: number; z: number }) {
+// A person who can be dragged across the floor. While they are held, the camera controls step aside.
+function Presenter({
+  x,
+  z,
+  size,
+  onMove,
+}: {
+  x: number;
+  z: number;
+  size: { width: number; length: number };
+  onMove: (x: number, z: number) => void;
+}) {
+  const { camera, gl, get } = useThree();
+  const [hover, setHover] = useState(false);
+  const [held, setHeld] = useState(false);
+  const stopDrag = useRef<(() => void) | null>(null);
+  const plane = useMemo(() => new Plane(new Vector3(0, 1, 0), 0), []);
+  const range = presenterRange(size.width, size.length);
+
+  useEffect(
+    () => () => {
+      stopDrag.current?.();
+    },
+    [],
+  );
+
+  const grab = (e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
+    const ray = new Raycaster();
+    const ndc = new Vector2();
+    const hit = new Vector3();
+    const floor = (ev: { clientX: number; clientY: number }) => {
+      const r = gl.domElement.getBoundingClientRect();
+      ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+      ray.setFromCamera(ndc, camera);
+      return ray.ray.intersectPlane(plane, hit);
+    };
+    const orbit = get().controls as OrbitControls | null;
+    const start = floor(e.nativeEvent);
+    if (!start) return;
+    const dx = x - start.x;
+    const dz = z - start.z;
+    const move = (ev: PointerEvent) => {
+      const p = floor(ev);
+      if (p)
+        onMove(
+          Math.min(range.x[1], Math.max(range.x[0], p.x + dx)),
+          Math.min(range.z[1], Math.max(range.z[0], p.z + dz)),
+        );
+    };
+    const end = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      if (orbit) orbit.enabled = true;
+      get().gl.domElement.style.cursor = '';
+      stopDrag.current = null;
+      setHeld(false);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    stopDrag.current = end;
+    if (orbit) orbit.enabled = false;
+    get().gl.domElement.style.cursor = 'grabbing';
+    setHeld(true);
+  };
+
+  const lit = hover || held;
   return (
-    <group position={[x, 0, z]}>
+    <group
+      position={[x, 0, z]}
+      onPointerDown={grab}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHover(true);
+        if (!stopDrag.current) get().gl.domElement.style.cursor = 'grab';
+      }}
+      onPointerOut={() => {
+        setHover(false);
+        if (!stopDrag.current) get().gl.domElement.style.cursor = '';
+      }}
+    >
+      <mesh position={[0, 0.95, 0]}>
+        <cylinderGeometry args={[0.36, 0.36, 1.9, 14]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+      <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.3, 0.37, 40]} />
+        <meshBasicMaterial
+          color="#6aa5ff"
+          transparent
+          opacity={lit ? 0.95 : 0.5}
+          side={DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
       <mesh position={[0, 0.82, 0]}>
         <capsuleGeometry args={[0.18, 0.9, 6, 12]} />
-        <meshStandardMaterial color="#3a86ff" />
+        <meshStandardMaterial color={lit ? '#6aa5ff' : '#3a86ff'} />
       </mesh>
       <mesh position={[0, 1.6, 0]}>
         <sphereGeometry args={[0.12, 16, 12]} />
         <meshStandardMaterial color="#e6c3a3" />
       </mesh>
+    </group>
+  );
+}
+// A ceiling microphone array hanging flush with the ceiling, sized like the Shure MXA920 (square or round).
+function MicArray({ position, shape }: { position: Vec3; shape: Plan['micShape'] }) {
+  const { size, depth } = rules.micArray[shape];
+  const y = position[1] + 0.02 - depth / 2; // the array's top is at the ceiling
+  const dark = '#2a2f37';
+  return (
+    <group position={[position[0], y, position[2]]}>
+      {shape === 'square' ? (
+        <>
+          <mesh>
+            <boxGeometry args={[size, depth, size]} />
+            <meshStandardMaterial color="#f5f7f9" />
+          </mesh>
+          <mesh position={[0, -depth / 2 - 0.001, 0]}>
+            <boxGeometry args={[size * 0.6, 0.004, size * 0.6]} />
+            <meshStandardMaterial color={dark} />
+          </mesh>
+        </>
+      ) : (
+        <>
+          <mesh>
+            <cylinderGeometry args={[size / 2, size / 2, depth, 48]} />
+            <meshStandardMaterial color="#f5f7f9" />
+          </mesh>
+          <mesh position={[0, -depth / 2 - 0.001, 0]}>
+            <cylinderGeometry args={[size * 0.3, size * 0.3, 0.004, 40]} />
+            <meshStandardMaterial color={dark} />
+          </mesh>
+        </>
+      )}
     </group>
   );
 }
@@ -420,32 +552,73 @@ function CameraBody({
     },
     [geometry, edges],
   );
+  // PTZ camera sized like the Q-SYS NC-12x80: 170 x 201 x 142 mm. The head pans and tilts towards the target;
+  // the base sits on a wall bracket (the supplied PTZ-WMB1 is a shelf-type wall mount).
+  const dx = cam.target[0] - cam.pos[0];
+  const dy = cam.target[1] - cam.pos[1];
+  const dz = cam.target[2] - cam.pos[2];
+  const yaw = Math.atan2(dx, dz);
+  const pitch = Math.asin(-dy / Math.hypot(dx, dy, dz));
+  const wallZ = (cam.pos[2] < 0 ? -room.length : room.length) / 2 - cam.pos[2];
+  const outward = Math.sign(wallZ);
   return (
-    <group position={cam.pos} quaternion={quaternion}>
-      <mesh>
-        <boxGeometry args={[0.26, 0.07, 0.07]} />
-        <meshStandardMaterial color="#14171c" />
+    <group position={cam.pos}>
+      <mesh position={[0, -0.09, wallZ - outward * 0.007]}>
+        <boxGeometry args={[0.14, 0.24, 0.014]} />
+        <meshStandardMaterial color="#cfd3da" />
       </mesh>
-      <mesh position={[0, 0, 0.045]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.025, 0.025, 0.03, 12]} />
-        <meshStandardMaterial color="#5b8def" />
+      <mesh position={[0, -0.15, wallZ / 2]}>
+        <boxGeometry args={[0.12, 0.03, Math.abs(wallZ)]} />
+        <meshStandardMaterial color="#aeb4bd" />
       </mesh>
+      <mesh position={[0, -0.1, 0]}>
+        <boxGeometry args={[0.17, 0.07, 0.142]} />
+        <meshStandardMaterial color="#2b3038" roughness={0.6} />
+      </mesh>
+      <group rotation={[0, yaw, 0]}>
+        <group rotation={[pitch, 0, 0]}>
+          <mesh>
+            <boxGeometry args={[0.17, 0.13, 0.112]} />
+            <meshStandardMaterial color="#1c2026" roughness={0.5} />
+          </mesh>
+          <mesh position={[0, 0, 0.071]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.046, 0.05, 0.03, 28]} />
+            <meshStandardMaterial color="#0c0f14" roughness={0.3} metalness={0.4} />
+          </mesh>
+          <mesh position={[0, 0, 0.0865]}>
+            <circleGeometry args={[0.034, 28]} />
+            <meshStandardMaterial color="#05070b" roughness={0.15} metalness={0.7} />
+          </mesh>
+          <mesh position={[0.06, 0.05, 0.057]}>
+            <sphereGeometry args={[0.006, 10, 8]} />
+            <meshBasicMaterial color="#3ddc84" />
+          </mesh>
+        </group>
+      </group>
       {showView && (
-        <>
+        <group quaternion={quaternion}>
           <mesh geometry={geometry}>
             <meshBasicMaterial color={COLORS.camera} transparent opacity={0.07} side={DoubleSide} depthWrite={false} />
           </mesh>
           <lineSegments geometry={edges}>
             <lineBasicMaterial color={COLORS.camera} transparent opacity={0.55} />
           </lineSegments>
-        </>
+        </group>
       )}
     </group>
   );
 }
-
-function Equipment({ plan, a }: { plan: Plan; a: Analysis }) {
+function Equipment({
+  plan,
+  a,
+  onPresenterMove,
+}: {
+  plan: Plan;
+  a: Analysis;
+  onPresenterMove: (x: number, z: number) => void;
+}) {
   const { gear, displays } = a;
+  const spot = presenterSpot(plan, displays);
   const ear = rules.earHeight;
   const frontZ = -plan.length / 2;
   return (
@@ -512,10 +685,7 @@ function Equipment({ plan, a }: { plan: Plan; a: Analysis }) {
       {plan.mics === 'ceiling' &&
         gear.mics.map((p, i) => (
           <group key={`ma-${i}`}>
-            <mesh position={p}>
-              <cylinderGeometry args={[0.17, 0.17, 0.03, 24]} />
-              <meshStandardMaterial color="#f5f7f9" />
-            </mesh>
+            <MicArray position={p} shape={plan.micShape} />
             {plan.micCoverage && (
               <>
                 <ConeVolume
@@ -579,7 +749,7 @@ function Equipment({ plan, a }: { plan: Plan; a: Analysis }) {
         </mesh>
       )}
       {plan.presenter && (
-        <Presenter x={displays.count === 2 ? -(displays.width + 0.4) : -(displays.width / 2 + 0.7)} z={frontZ + 1.0} />
+        <Presenter x={spot.x} z={spot.z} size={{ width: plan.width, length: plan.length }} onMove={onPresenterMove} />
       )}
     </group>
   );
@@ -610,11 +780,13 @@ export default function PlannerScene({
   analysis,
   view,
   onReady,
+  onPresenterMove,
 }: {
   plan: Plan;
   analysis: Analysis;
   view: ViewState;
   onReady: (capture: Capture) => void;
+  onPresenterMove: (x: number, z: number) => void;
 }) {
   const initial = viewPose(plan, 'iso');
   const { layout, displays } = analysis;
@@ -636,7 +808,7 @@ export default function PlannerScene({
         <Chair key={i} x={s.x} z={s.z} rot={s.rot} />
       ))}
       <Displays plan={plan} displays={displays} />
-      <Equipment plan={plan} a={analysis} />
+      <Equipment plan={plan} a={analysis} onPresenterMove={onPresenterMove} />
       <Controls plan={plan} view={view} />
       <CaptureBridge onReady={onReady} />
     </Canvas>
