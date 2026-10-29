@@ -380,7 +380,37 @@
 }
 .planner-plans-actions {
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   justify-content: flex-end;
+}
+.planner-plans-actions button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.planner-plans-note {
+  margin: 0;
+  color: #52606d;
+  font-size: 0.75rem;
+  text-align: right;
+}
+/* The sheet lives outside the page layout and shows only when printing. */
+.planner-print-root {
+  display: none;
+}
+@media print {
+  body > *:not(.planner-print-root) {
+    display: none !important;
+  }
+  .planner-print-root {
+    display: block;
+  }
+  .planner-print-root svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
 }
 .planner-flow svg {
   display: block;

@@ -1,75 +1,40 @@
 import { useMemo, useRef, useState } from 'react';
-import { buildDrawings, type DrawingId, type Prim } from '@/lib/planner/drawings';
+import { createPortal } from 'react-dom';
+import { buildDrawings, type DrawingId } from '@/lib/planner/drawings';
 import type { Analysis, Plan } from '@/lib/planner/model';
-
-// The drawings carry their own styles, so a downloaded SVG looks the same as it does here.
-const styles = `
-.s-wall{fill:none;stroke:#1f2933;stroke-width:2.4;stroke-linejoin:round}
-.s-floor{fill:none;stroke:#1f2933;stroke-width:3}
-.s-furniture{fill:#efe3d3;stroke:#7a6246;stroke-width:1.2}
-.s-ref{fill:none;stroke:#8896a5;stroke-width:1;stroke-dasharray:5 4}
-.s-chair{fill:#dfe4ea;stroke:#7b8794;stroke-width:1}
-.s-display{fill:#1f2933;stroke:#1f2933}
-.s-device{fill:#c9d3de;stroke:#52606d;stroke-width:1}
-.s-speaker{fill:#d9f2e3;stroke:#2f9e68;stroke-width:1.2}
-.s-mic{fill:#dff3fb;stroke:#1c8fb5;stroke-width:1.4}
-.s-camera{fill:#fff1cc;stroke:#c98a00;stroke-width:1.2}
-.s-fov{fill:rgba(255,183,3,.08);stroke:#e0a100;stroke-width:.8;stroke-dasharray:3 3}
-.s-grid{fill:none;stroke:#dde3e9;stroke-width:.7}
-.s-dim,.s-ext{fill:none;stroke:#b4412c;stroke-width:1}
-.s-ext{stroke-width:.6}
-.s-person{fill:#cfe0ff;stroke:#3a6fd8;stroke-width:1.2}
-text{font-family:Arial,Helvetica,sans-serif}
-.t-label{font-size:11px;fill:#1f2933}
-.t-small{font-size:9.5px;fill:#52606d}
-.t-dim{font-size:10.5px;fill:#b4412c;paint-order:stroke;stroke:#fff;stroke-width:3px}
-.t-title{font-size:13px;font-weight:700;fill:#1f2933}
-.t-ondark{font-size:10px;fill:#fff}
-`;
+import { buildSheet } from '@/lib/planner/sheet';
+import { drawingStyles, Shape } from './drawing-shapes';
+import PrintSheet from './print-sheet';
 
 const n = (v: number) => Math.round(v * 10) / 10;
 
-function Shape({ p }: { p: Prim }) {
-  if (p.k === 'rect') {
-    return <rect className={`s-${p.s}`} x={n(p.x)} y={n(p.y)} width={n(p.w)} height={n(p.h)} rx={p.r} />;
-  }
-  if (p.k === 'circle') return <circle className={`s-${p.s}`} cx={n(p.x)} cy={n(p.y)} r={n(p.r)} />;
-  if (p.k === 'line') {
-    return <line className={`s-${p.s}`} x1={n(p.x1)} y1={n(p.y1)} x2={n(p.x2)} y2={n(p.y2)} />;
-  }
-  if (p.k === 'poly') {
-    return <polygon className={`s-${p.s}`} points={p.pts.map(([x, y]) => `${n(x)},${n(y)}`).join(' ')} />;
-  }
-  return (
-    <text
-      className={`t-${p.s}`}
-      x={n(p.x)}
-      y={n(p.y)}
-      textAnchor={p.a ?? 'middle'}
-      transform={p.rot ? `rotate(${p.rot} ${n(p.x)} ${n(p.y)})` : undefined}
-    >
-      {p.t}
-    </text>
-  );
+function saveSvg(svg: SVGSVGElement | null, name: string) {
+  if (!svg) return;
+  const text = new XMLSerializer().serializeToString(svg);
+  const url = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// Floor plan, ceiling plan, display wall and section, with dimensions; each can be saved as an SVG file.
+const fileNames: Record<DrawingId, string> = {
+  floor: 'k4av-floor-plan.svg',
+  ceiling: 'k4av-ceiling-plan.svg',
+  front: 'k4av-display-wall.svg',
+  side: 'k4av-section.svg',
+};
+
+// Floor plan, ceiling plan, display wall and section, with dimensions, and the same four on one printable sheet.
 export default function PlanDrawings({ plan, analysis }: { plan: Plan; analysis: Analysis }) {
   const [id, setId] = useState<DrawingId>('floor');
+  const [today] = useState(() => new Date().toISOString().slice(0, 10));
   const svg = useRef<SVGSVGElement | null>(null);
+  const sheetSvg = useRef<SVGSVGElement | null>(null);
   const drawings = useMemo(() => buildDrawings(plan, analysis), [plan, analysis]);
+  const sheet = useMemo(() => buildSheet(plan, analysis, today), [plan, analysis, today]);
   const drawing = drawings.find((d) => d.id === id) ?? drawings[0];
-
-  const save = () => {
-    if (!svg.current) return;
-    const text = new XMLSerializer().serializeToString(svg.current);
-    const url = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `k4av-${drawing.id === 'front' ? 'display-wall' : drawing.id === 'side' ? 'section' : `${drawing.id}-plan`}.svg`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
 
   return (
     <div className="planner-plans">
@@ -89,7 +54,7 @@ export default function PlanDrawings({ plan, analysis }: { plan: Plan; analysis:
           aria-label={`${drawing.title} of the room`}
         >
           <title>{`${drawing.title} of the room`}</title>
-          <style>{styles}</style>
+          <style>{drawingStyles}</style>
           <rect width={n(drawing.width)} height={n(drawing.height)} fill="#fff" />
           {drawing.prims.map((p, i) => (
             <Shape key={i} p={p} />
@@ -97,10 +62,27 @@ export default function PlanDrawings({ plan, analysis }: { plan: Plan; analysis:
         </svg>
       </div>
       <div className="planner-plans-actions">
-        <button type="button" onClick={save}>
+        <button type="button" onClick={() => saveSvg(svg.current, fileNames[drawing.id])}>
           Save this drawing (SVG)
         </button>
+        <button type="button" onClick={() => saveSvg(sheetSvg.current, 'k4av-drawing-sheet.svg')}>
+          Save the sheet (SVG)
+        </button>
+        <button type="button" className="primary" onClick={() => window.print()}>
+          Print the sheet or save it as PDF
+        </button>
       </div>
+      <p className="planner-plans-note">
+        One {sheet.paper.name} sheet with all four drawings at {sheet.scale.label}. In the print dialog choose Save as
+        PDF, and set margins to none.
+      </p>
+      {createPortal(
+        <div className="planner-print-root">
+          <style>{`@page { size: ${sheet.paper.w}pt ${sheet.paper.h}pt; margin: 0 }`}</style>
+          <PrintSheet sheet={sheet} svgRef={sheetSvg} />
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }

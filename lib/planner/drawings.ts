@@ -32,6 +32,7 @@ export type Drawing = {
   title: string;
   width: number;
   height: number;
+  scale: number; // pixels per metre
   prims: Prim[];
 };
 
@@ -42,7 +43,14 @@ export const drawingTitles: Record<DrawingId, string> = {
   side: 'Section',
 };
 
-const MARGIN = { left: 92, top: 70, right: 96, bottom: 84 };
+export type DrawingOptions = {
+  scale?: number; // pixels per metre; by default each drawing is sized to fill the screen
+  bare?: boolean; // only the drawing's name and key: no room line or disclaimer, for a sheet with its own title block
+};
+const MARGIN = { top: 70, bottom: 84 };
+// room beside each drawing for its dimension lines: the plans need little on the right, the display wall a stack on both sides
+const SIDE = { plan: { left: 66, right: 30 }, wall: { left: 92, right: 96 }, section: { left: 96, right: 60 } };
+const bottomSpace = (o: DrawingOptions) => MARGIN.bottom - (o.bare ? 26 : 0);
 const fit = (w: number, h: number) => Math.max(14, Math.min(64, 560 / w, 380 / h));
 const unique = (values: number[], step = 0.05) => {
   const out: number[] = [];
@@ -105,13 +113,13 @@ function sheet() {
 
 type Sheet = ReturnType<typeof sheet>;
 
-const roomLabel = (plan: Plan) =>
+export const roomLabel = (plan: Plan) =>
   `${roomTypes[plan.roomType].noun}, ${formatLength(plan.length, plan.unit)} × ${formatLength(plan.width, plan.unit)}, ceiling ${formatLength(plan.height, plan.unit)}`;
 
 // The title block under every drawing. A long legend continues on the next line.
-function titleBlock(g: Sheet, x: number, y: number, title: string, plan: Plan, legend: string) {
+function titleBlock(g: Sheet, x: number, y: number, title: string, plan: Plan, legend: string, bare = false) {
   g.text(x, y, title, 'title', 'start');
-  g.text(x, y + 15, roomLabel(plan), 'label', 'start');
+  if (!bare) g.text(x, y + 15, roomLabel(plan), 'label', 'start');
   const lines: string[] = [];
   let current = '';
   for (const part of legend ? legend.split(' · ') : []) {
@@ -123,9 +131,10 @@ function titleBlock(g: Sheet, x: number, y: number, title: string, plan: Plan, l
     }
   }
   if (current) lines.push(current);
-  lines.push('Indicative sketch. Check dimensions on site.');
-  lines.forEach((line, i) => g.text(x, y + 29 + i * 12, line, 'small', 'start'));
+  if (!bare) lines.push('Indicative sketch. Check dimensions on site.');
+  lines.forEach((line, i) => g.text(x, y + (bare ? 14 : 29) + i * 12, line, 'small', 'start'));
 }
+
 // ---------------------------------------------------------------- plan views
 
 // A wedge on the plan: what a camera sees, cut off at the walls.
@@ -148,11 +157,11 @@ function wedge(
   g.poly([[X(cam.pos[0]), Y(cam.pos[2])], corner(a - half), corner(a + half)], 'fov');
 }
 
-function planBase(plan: Plan, a: Analysis, ceiling: boolean) {
+function planBase(plan: Plan, a: Analysis, ceiling: boolean, opts: DrawingOptions) {
   const { length: L, width: W } = plan;
   const { layout, displays, gear } = a;
-  const s = fit(W, L);
-  const ox = MARGIN.left;
+  const s = opts.scale ?? fit(W, L);
+  const ox = SIDE.plan.left;
   const oy = MARGIN.top;
   const X = (x: number) => ox + (x + W / 2) * s;
   const Y = (z: number) => oy + (z + L / 2) * s;
@@ -208,13 +217,13 @@ function planBase(plan: Plan, a: Analysis, ceiling: boolean) {
   if (c && plan.control === 'table' && !ceiling)
     g.rect(X(c[0]) - 0.12 * s, Y(c[2]) - 0.08 * s, 0.24 * s, 0.16 * s, 'device');
 
-  return { g, s, ox, oy, X, Y, width: ox + W * s + MARGIN.right, height: oy + L * s + MARGIN.bottom };
+  return { g, s, ox, oy, X, Y, width: ox + W * s + SIDE.plan.right, height: oy + L * s + bottomSpace(opts) };
 }
 
-export function floorPlan(plan: Plan, a: Analysis): Drawing {
+export function floorPlan(plan: Plan, a: Analysis, opts: DrawingOptions = {}): Drawing {
   const { layout, displays, gear } = a;
   const { length: L, unit } = plan;
-  const { g, s, ox, oy, X, Y, width, height } = planBase(plan, a, false);
+  const { g, s, ox, oy, X, Y, width, height } = planBase(plan, a, false, opts);
 
   if (plan.speakers === 'soundbar' && gear.soundbar) {
     g.rect(
@@ -276,14 +285,15 @@ export function floorPlan(plan: Plan, a: Analysis): Drawing {
     'Floor plan',
     plan,
     `C camera · P presenter · farthest seat ${formatLength(displays.farthest, unit)} from the display`,
+    opts.bare,
   );
-  return { id: 'floor', title: drawingTitles.floor, width, height, prims: g.prims };
+  return { id: 'floor', title: drawingTitles.floor, width, height, scale: s, prims: g.prims };
 }
 
-export function ceilingPlan(plan: Plan, a: Analysis): Drawing {
+export function ceilingPlan(plan: Plan, a: Analysis, opts: DrawingOptions = {}): Drawing {
   const { gear } = a;
   const { length: L, unit } = plan;
-  const { g, s, ox, oy, X, Y, width, height } = planBase(plan, a, true);
+  const { g, s, ox, oy, X, Y, width, height } = planBase(plan, a, true, opts);
 
   if (plan.speakers === 'ceiling') {
     const r = Math.max(4, 0.1 * s);
@@ -323,17 +333,17 @@ export function ceilingPlan(plan: Plan, a: Analysis): Drawing {
   const legend =
     '○ ceiling speaker · □ microphone array · C camera on the wall · dashed: furniture below · grid: ' +
     (plan.unit === 'ft' ? '2 × 2 ft tiles' : '600 mm tiles');
-  titleBlock(g, ox, oy + L * s + 50, 'Ceiling plan', plan, legend);
-  return { id: 'ceiling', title: drawingTitles.ceiling, width, height, prims: g.prims };
+  titleBlock(g, ox, oy + L * s + 50, 'Ceiling plan', plan, legend, opts.bare);
+  return { id: 'ceiling', title: drawingTitles.ceiling, width, height, scale: s, prims: g.prims };
 }
 
 // ---------------------------------------------------------------- elevation and section
 
-export function displayWall(plan: Plan, a: Analysis): Drawing {
+export function displayWall(plan: Plan, a: Analysis, opts: DrawingOptions = {}): Drawing {
   const { width: W, height: H, unit } = plan;
   const { displays, gear } = a;
-  const s = fit(W, H);
-  const ox = MARGIN.left;
+  const s = opts.scale ?? fit(W, H);
+  const ox = SIDE.wall.left;
   const oy = MARGIN.top - 12;
   const X = (x: number) => ox + (x + W / 2) * s;
   const Y = (y: number) => oy + (H - y) * s;
@@ -374,21 +384,22 @@ export function displayWall(plan: Plan, a: Analysis): Drawing {
   unique(onWall.map((c) => c.pos[1])).forEach((y, i) => {
     g.dim(X(-W / 2), Y(y), X(-W / 2), Y(0), 64 + i * 34, `camera ${formatLength(y, unit)}`);
   });
-  titleBlock(g, ox, oy + H * s + 46, 'Display wall, seen from the room', plan, 'C camera');
+  titleBlock(g, ox, oy + H * s + 46, 'Display wall, seen from the room', plan, 'C camera', opts.bare);
   return {
     id: 'front',
     title: drawingTitles.front,
-    width: ox + W * s + MARGIN.right + 36,
-    height: oy + H * s + MARGIN.bottom,
+    width: ox + W * s + SIDE.wall.right,
+    height: oy + H * s + bottomSpace(opts),
+    scale: s,
     prims: g.prims,
   };
 }
 
-export function section(plan: Plan, a: Analysis): Drawing {
+export function section(plan: Plan, a: Analysis, opts: DrawingOptions = {}): Drawing {
   const { length: L, height: H, unit } = plan;
   const { layout, displays, gear } = a;
-  const s = fit(L, H);
-  const ox = MARGIN.left + 20;
+  const s = opts.scale ?? fit(L, H);
+  const ox = SIDE.section.left;
   const oy = MARGIN.top - 12;
   const X = (z: number) => ox + (z + L / 2) * s;
   const Y = (y: number) => oy + (H - y) * s;
@@ -471,16 +482,18 @@ export function section(plan: Plan, a: Analysis): Drawing {
     'Section, seen from the side wall',
     plan,
     'C camera · P presenter · dashed: seated ear height',
+    opts.bare,
   );
   return {
     id: 'side',
     title: drawingTitles.side,
-    width: ox + L * s + MARGIN.right,
-    height: oy + H * s + MARGIN.bottom + 62,
+    width: ox + L * s + SIDE.section.right,
+    height: oy + H * s + bottomSpace(opts) + 62,
+    scale: s,
     prims: g.prims,
   };
 }
 
-export function buildDrawings(plan: Plan, a: Analysis): Drawing[] {
-  return [floorPlan(plan, a), ceilingPlan(plan, a), displayWall(plan, a), section(plan, a)];
+export function buildDrawings(plan: Plan, a: Analysis, opts: DrawingOptions = {}): Drawing[] {
+  return [floorPlan(plan, a, opts), ceilingPlan(plan, a, opts), displayWall(plan, a, opts), section(plan, a, opts)];
 }
