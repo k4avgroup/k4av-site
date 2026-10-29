@@ -6,12 +6,14 @@ import {
   CanvasTexture,
   DoubleSide,
   EdgesGeometry,
+  ExtrudeGeometry,
   Float32BufferAttribute,
   Matrix4,
   Plane,
   PlaneGeometry,
   Quaternion,
   Raycaster,
+  Shape,
   SRGBColorSpace,
   Vector2,
   Vector3,
@@ -257,8 +259,38 @@ function Chair({ x, z, rot }: { x: number; z: number; rot: number }) {
   );
 }
 
+// A boat-shaped table: a long top with half-round ends, on a plinth.
+function BoatTable({ table, wood }: { table: Analysis['layout']['table']; wood: string }) {
+  const geometry = useMemo(() => {
+    const r = table.width / 2;
+    const straight = Math.max(0, table.length - table.width) / 2;
+    const outline = new Shape();
+    outline.moveTo(-r, -straight);
+    outline.lineTo(-r, straight);
+    outline.absarc(0, straight, r, Math.PI, 0, true);
+    outline.lineTo(r, -straight);
+    outline.absarc(0, -straight, r, 0, Math.PI, true);
+    const g = new ExtrudeGeometry(outline, { depth: 0.04, bevelEnabled: false, curveSegments: 28 });
+    g.rotateX(-Math.PI / 2);
+    return g;
+  }, [table.width, table.length]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  return (
+    <group position={[table.x, 0, table.z]}>
+      <mesh geometry={geometry} position={[0, 0.72, 0]}>
+        <meshStandardMaterial color={wood} />
+      </mesh>
+      <mesh position={[0, 0.36, 0]}>
+        <boxGeometry args={[table.width * 0.45, 0.72, Math.max(0.6, table.length * 0.6)]} />
+        <meshStandardMaterial color="#222831" />
+      </mesh>
+    </group>
+  );
+}
+
 function Table({ table }: { table: Analysis['layout']['table'] }) {
   const wood = '#b98b62';
+  if (table.shape === 'boat') return <BoatTable table={table} wood={wood} />;
   if (table.shape === 'round') {
     return (
       <group position={[table.x, 0, table.z]}>

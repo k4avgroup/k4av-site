@@ -106,7 +106,7 @@ function sheet() {
 type Sheet = ReturnType<typeof sheet>;
 
 const roomLabel = (plan: Plan) =>
-  `${roomTypes[plan.roomType].label} room, ${formatLength(plan.length, plan.unit)} × ${formatLength(plan.width, plan.unit)}, ceiling ${formatLength(plan.height, plan.unit)}`;
+  `${roomTypes[plan.roomType].noun}, ${formatLength(plan.length, plan.unit)} × ${formatLength(plan.width, plan.unit)}, ceiling ${formatLength(plan.height, plan.unit)}`;
 
 // The title block under every drawing. A long legend continues on the next line.
 function titleBlock(g: Sheet, x: number, y: number, title: string, plan: Plan, legend: string) {
@@ -171,16 +171,23 @@ function planBase(plan: Plan, a: Analysis, ceiling: boolean) {
 
   // furniture: drawn solid on the floor plan, dashed on the ceiling plan
   const chair = 0.45 * s;
+  // a round table is a circle, a boat-shaped one a rectangle with half-round ends
+  const tableShape = (t: Analysis['layout']['tables'][number], style: 'ref' | 'furniture') => {
+    if (t.shape === 'round') g.circle(X(t.x), Y(t.z), (t.width / 2) * s, style);
+    else
+      g.rect(
+        X(t.x - t.width / 2),
+        Y(t.z - t.length / 2),
+        t.width * s,
+        t.length * s,
+        style,
+        t.shape === 'boat' ? (t.width / 2) * s : undefined,
+      );
+  };
   if (ceiling) {
-    for (const t of layout.tables) {
-      if (t.shape === 'round') g.circle(X(t.x), Y(t.z), (t.width / 2) * s, 'ref');
-      else g.rect(X(t.x - t.width / 2), Y(t.z - t.length / 2), t.width * s, t.length * s, 'ref');
-    }
+    for (const t of layout.tables) tableShape(t, 'ref');
   } else {
-    for (const t of layout.tables) {
-      if (t.shape === 'round') g.circle(X(t.x), Y(t.z), (t.width / 2) * s, 'furniture');
-      else g.rect(X(t.x - t.width / 2), Y(t.z - t.length / 2), t.width * s, t.length * s, 'furniture');
-    }
+    for (const t of layout.tables) tableShape(t, 'furniture');
     for (const seat of layout.seats) g.rect(X(seat.x) - chair / 2, Y(seat.z) - chair / 2, chair, chair, 'chair', 3);
   }
 
@@ -251,7 +258,7 @@ export function floorPlan(plan: Plan, a: Analysis): Drawing {
   } else {
     const t = layout.table;
     const right = t.x + t.width / 2 + 0.9;
-    g.dim(X(right), Y(t.z - t.length / 2), X(right), Y(t.z + t.length / 2), 0, formatLength(t.length, unit));
+    g.dim(X(right), Y(t.z - t.length / 2), X(right), Y(t.z + t.length / 2), -14, formatLength(t.length, unit));
     if (!layout.endChairs)
       g.dim(
         X(t.x - t.width / 2),

@@ -17,7 +17,8 @@ import {
   presetText,
   roomTypes,
   rules,
-  tableSize,
+  seatLimits,
+  tableShapes,
   toUnit,
   type Plan,
   type RoomType,
@@ -246,7 +247,8 @@ export default function RoomPlanner() {
     setTimeout(() => setCopied(null), 3000);
   };
 
-  const tableDim = tableSize(plan.shape, plan.seats, layout.endChairs, plan.roomType === 'huddle');
+  const shapes = roomTypes[plan.roomType].shapes;
+  const [minSeats, maxSeats] = seatLimits(plan.roomType, plan.shape);
 
   return (
     <section className="planner" aria-label="Room planner">
@@ -312,32 +314,16 @@ export default function RoomPlanner() {
           {step === 1 && (
             <>
               <h2>{plan.roomType === 'training' ? 'Desks and seats' : 'Table and seats'}</h2>
-              {plan.roomType !== 'training' && (
+              {shapes.length > 1 && (
                 <Seg
-                  label="Table shape"
+                  label="Table"
                   value={plan.shape}
-                  options={[
-                    { value: 'rect', label: 'Rectangular' },
-                    { value: 'round', label: 'Round' },
-                  ]}
+                  options={shapes.map((s) => ({ value: s, label: tableShapes[s].label }))}
                   onChange={(v) => set('shape', v)}
                 />
               )}
-              <Count
-                label="Seats"
-                value={plan.seats}
-                min={
-                  plan.shape === 'round'
-                    ? Math.max(3, limitsFor(plan.roomType).seats[0])
-                    : limitsFor(plan.roomType).seats[0]
-                }
-                max={
-                  plan.shape === 'round'
-                    ? Math.min(14, limitsFor(plan.roomType).seats[1])
-                    : limitsFor(plan.roomType).seats[1]
-                }
-                onChange={(n) => set('seats', n)}
-              />
+              {shapes.length > 1 && <p className="planner-hint">{tableShapes[plan.shape].about}</p>}
+              <Count label="Seats" value={plan.seats} min={minSeats} max={maxSeats} onChange={(n) => set('seats', n)} />
               {plan.roomType !== 'training' && (
                 <Seg
                   label="Table position"
@@ -350,13 +336,14 @@ export default function RoomPlanner() {
                   onChange={(v) => set('position', v)}
                 />
               )}
-              {plan.roomType === 'conference' && plan.shape === 'rect' && (
-                <Check
-                  label="Chairs at the ends of the table"
-                  checked={plan.endChairs}
-                  onChange={(v) => set('endChairs', v)}
-                />
-              )}
+              {(plan.roomType === 'conference' || plan.roomType === 'boardroom') &&
+                (plan.shape === 'rect' || plan.shape === 'boat') && (
+                  <Check
+                    label="Chairs at the ends of the table"
+                    checked={plan.endChairs}
+                    onChange={(v) => set('endChairs', v)}
+                  />
+                )}
               {plan.roomType !== 'huddle' && (
                 <Check label="Show a presenter" checked={plan.presenter} onChange={(v) => set('presenter', v)} />
               )}
@@ -376,8 +363,8 @@ export default function RoomPlanner() {
               )}
               <p className="planner-hint">
                 {layout.rows
-                  ? `${layout.rows.count} row${layout.rows.count > 1 ? 's' : ''} of up to ${layout.rows.perRow} seats at two-seat desks, ${formatLength(layout.tables[0].width, u)} Ã— ${formatLength(layout.tables[0].length, u)} each.`
-                  : `The table is sized for you: ${formatLength(tableDim.length, u)} Ã— ${formatLength(tableDim.width, u)}.`}
+                  ? `${layout.rows.count} row${layout.rows.count > 1 ? 's' : ''} of up to ${layout.rows.perRow} seats at two-seat desks, ${formatLength(layout.tables[0].width, u)} × ${formatLength(layout.tables[0].length, u)} each.`
+                  : `The table is sized for you: ${formatLength(layout.table.length, u)} × ${formatLength(layout.table.width, u)}.`}
               </p>
             </>
           )}
@@ -581,10 +568,10 @@ export default function RoomPlanner() {
               <h2>Your plan</h2>
               <p className="planner-hint">
                 {formatLength(plan.length, u)} × {formatLength(plan.width, u)}, ceiling {formatLength(plan.height, u)}.{' '}
-                {roomTypes[plan.roomType].label} room, {plan.seats} seats{' '}
+                {roomTypes[plan.roomType].noun}, {plan.seats} seats{' '}
                 {plan.roomType === 'training'
                   ? 'in rows of desks'
-                  : `at a ${plan.shape === 'round' ? 'round' : 'rectangular'} table`}
+                  : `at a ${plan.shape === 'u' ? 'U-shaped' : tableShapes[plan.shape].label.toLowerCase()} table`}
                 .
               </p>
               <ul className="planner-items">

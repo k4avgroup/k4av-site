@@ -11,9 +11,12 @@ import {
   keepClear,
   normalizePlan,
   planSummary,
+  roomTypes,
+  seatLimits,
   presenterSpot,
   presetText,
   rules,
+  tableShapes,
   tableSize,
   templates,
 } from '../lib/planner/model.ts';
@@ -367,7 +370,7 @@ test('a classroom block stands in for the table everywhere else', () => {
 
 test('choosing a kind of room applies its template and keeps what is personal', () => {
   const mine = plan({ unit: 'ft', system: 'zoom', ceiling: false });
-  for (const type of ['huddle', 'conference', 'training'] as const) {
+  for (const type of ['huddle', 'conference', 'boardroom', 'training'] as const) {
     const next = applyRoomType(mine, type);
     assert.equal(next.roomType, type);
     assert.equal(next.unit, 'ft');
@@ -382,7 +385,7 @@ test('choosing a kind of room applies its template and keeps what is personal', 
 });
 
 test('every package suits every kind of room', () => {
-  for (const type of ['huddle', 'conference', 'training'] as const) {
+  for (const type of ['huddle', 'conference', 'boardroom', 'training'] as const) {
     const base = applyRoomType(plan(), type);
     for (const preset of ['essential', 'standard', 'premium'] as const) {
       const p = applyPreset(base, preset);
@@ -408,4 +411,142 @@ test('the room type travels in the link, and old links without it are conference
   assert.equal(decodePlan(btoa(JSON.stringify(old.slice(0, 23)))?.replace(/=+$/, '') ?? '')?.roomType, 'conference');
   assert.ok(planSummary(training, 'x').includes('Training room'));
   assert.ok(planSummary(huddle, 'x').includes('Huddle room'));
+});
+
+const kinds = ['huddle', 'conference', 'boardroom', 'training'] as const;
+const distanceTo = (px: number, pz: number, t: { x: number; z: number; length: number; width: number }) => {
+  const dx = Math.max(Math.abs(px - t.x) - t.width / 2, 0);
+  const dz = Math.max(Math.abs(pz - t.z) - t.length / 2, 0);
+  return Math.hypot(dx, dz);
+};
+
+test('each kind of room offers the tables that make sense for it', () => {
+  assert.deepEqual(roomTypes.huddle.shapes, ['rect', 'round']);
+  assert.deepEqual(roomTypes.training.shapes, ['rect']);
+  assert.deepEqual([...roomTypes.conference.shapes].sort(), ['boat', 'rect', 'round', 'u']);
+  assert.deepEqual([...roomTypes.boardroom.shapes].sort(), ['boat', 'rect', 'round', 'u']);
+  assert.equal(normalizePlan({ roomType: 'huddle', shape: 'u' }).shape, 'rect');
+  assert.equal(normalizePlan({ roomType: 'training', shape: 'boat' }).shape, 'rect');
+  assert.equal(normalizePlan({ roomType: 'boardroom', shape: 'hexagon' }).shape, 'boat');
+  for (const shape of ['rect', 'boat', 'round', 'u'] as const) {
+    assert.equal(normalizePlan({ roomType: 'conference', shape }).shape, shape);
+    assert.ok(tableShapes[shape].label.length > 0);
+  }
+  assert.deepEqual(seatLimits('boardroom', 'round'), [8, 14]);
+  assert.deepEqual(seatLimits('conference', 'u'), [6, 24]);
+  assert.deepEqual(seatLimits('conference', 'boat'), [4, 20]);
+  assert.deepEqual(seatLimits('huddle', 'round'), [3, 6]);
+});
+
+test('every table shape seats everyone one chair-width away from the table, inside the room', () => {
+  for (const roomType of kinds) {
+    if (roomType === 'training') continue;
+    for (const shape of roomTypes[roomType].shapes) {
+      const [lo, hi] = seatLimits(roomType, shape);
+      for (const seats of [lo, Math.round((lo + hi) / 2), hi]) {
+        const big: number = roomType === 'huddle' ? 5.5 : 12;
+        const p = normalizePlan({ roomType, shape, seats, length: big, width: big });
+        const layout = computeLayout(p);
+        const label: string = `${roomType} ${shape} ${seats}`;
+        assert.equal(layout.seats.length, p.seats, `${label}: a chair for every seat`);
+        assert.ok(layout.fits, `${label} fits ${big} m`);
+        for (const s of layout.seats) {
+          assert.ok(Math.abs(s.x) <= p.width / 2 && Math.abs(s.z) <= p.length / 2, `${label}: chair inside the room`);
+          const gap =
+            shape === 'round'
+              ? Math.abs(Math.hypot(s.x - layout.table.x, s.z - layout.table.z) - layout.table.width / 2)
+              : Math.min(...layout.tables.map((t) => distanceTo(s.x, s.z, t)));
+          assert.ok(Math.abs(gap - rules.chairOffset) < 0.05, `${label}: chair at ${gap.toFixed(2)} m from the table`);
+        }
+        assert.ok(layout.path.length >= 2 && layout.keepOut.length >= 1, `${label}: path and keep-out`);
+      }
+    }
+  }
+});
+
+test('a boat-shaped table is a rounded rectangle, a little wider than a plain one', () => {
+  const boat = computeLayout(plan({ shape: 'boat', seats: 10 }));
+  const rect = computeLayout(plan({ shape: 'rect', seats: 10 }));
+  assert.equal(boat.table.shape, 'boat');
+  assert.equal(boat.tables.length, 1);
+  assert.ok(boat.table.width > rect.table.width);
+  assert.ok(boat.table.length > rect.table.length, 'its ends are part of the length');
+  const withEnds = computeLayout(plan({ shape: 'boat', seats: 10, endChairs: true }));
+  assert.equal(withEnds.seats.length, 10);
+  assert.equal(withEnds.endChairs, true);
+  assert.equal(plan({ roomType: 'conference', shape: 'boat', endChairs: true }).endChairs, true);
+  assert.equal(plan({ roomType: 'conference', shape: 'round', endChairs: true }).endChairs, false);
+  assert.equal(plan({ roomType: 'conference', shape: 'u', endChairs: true }).endChairs, false);
+  assert.equal(plan({ roomType: 'huddle', endChairs: true }).endChairs, false);
+});
+
+test('a U of tables opens towards the display, with room to stand in the middle', () => {
+  for (const seats of [6, 9, 12, 18, 24]) {
+    const p = plan({ shape: 'u', seats, length: 12, width: 12 });
+    const layout = computeLayout(p);
+    assert.equal(layout.tables.length, 3, 'two arms and a base');
+    const [left, right, base] = layout.tables;
+    assert.equal(left.x, -right.x);
+    assert.ok(base.z > left.z, 'the base is at the back');
+    assert.ok(base.width > left.width * 2, 'the base spans between the arms');
+    const mouth = base.width - 2 * left.width;
+    assert.ok(mouth >= 1.2 - 1e-9, `${seats} seats: ${mouth} m between the arms`);
+    assert.equal(layout.seats.length, seats);
+    // arm chairs face the middle, back chairs face the display
+    assert.ok(layout.seats.filter((s) => s.x < -base.width / 2).every((s) => Math.abs(s.rot - Math.PI / 2) < 1e-6));
+    assert.ok(layout.seats.filter((s) => s.x > base.width / 2).every((s) => Math.abs(s.rot + Math.PI / 2) < 1e-6));
+    assert.ok(layout.seats.filter((s) => s.z > base.z).every((s) => Math.abs(s.rot - Math.PI) < 1e-6));
+    // the presenter may stand in the opening but not on the tables
+    const middle = { x: 0, z: left.z };
+    assert.deepEqual(keepClear(p, layout, middle.x, middle.z), middle, `${seats} seats: the opening is free`);
+    const onArm = keepClear(p, layout, left.x, left.z);
+    assert.ok(Math.hypot(onArm.x - left.x, onArm.z - left.z) > 0.3, 'moved off the arm');
+  }
+});
+
+test('table microphones, panels and the touch panel sit on the tabletop of every shape', () => {
+  for (const shape of ['rect', 'boat', 'round', 'u'] as const) {
+    const p = plan({ shape, seats: 12, length: 12, width: 12, mics: 'table', tablePanels: true, control: 'table' });
+    const a = analyze(p);
+    const onTable = (x: number, z: number) =>
+      a.layout.tables.some((t) =>
+        t.shape === 'round' ? Math.hypot(x - t.x, z - t.z) <= t.width / 2 + 0.01 : distanceTo(x, z, t) <= 0.01,
+      );
+    assert.ok(a.gear.mics.length >= 1 && a.gear.panels.length >= 1 && a.gear.control, shape);
+    for (const m of a.gear.mics) assert.ok(onTable(m[0], m[2]), `${shape}: microphone on the table`);
+    for (const m of a.gear.panels) assert.ok(onTable(m[0], m[2]), `${shape}: panel on the table`);
+    const c = a.gear.control as [number, number, number];
+    assert.ok(onTable(c[0], c[2]), `${shape}: touch panel on the table`);
+  }
+});
+
+test('the boardroom is a formal room: bigger table, two displays, ceiling audio', () => {
+  const room = applyRoomType(plan(), 'boardroom');
+  assert.equal(room.roomType, 'boardroom');
+  assert.equal(room.shape, 'boat');
+  assert.equal(room.displays, 2);
+  assert.equal(room.speakers, 'ceiling');
+  assert.ok(computeLayout(room).fits);
+  assert.ok(room.seats >= 8 && room.seats <= 20);
+  const small = normalizePlan({ roomType: 'boardroom', seats: 2, length: 3, width: 2 });
+  assert.equal(small.seats, 8);
+  assert.equal(small.length, 6);
+  assert.equal(normalizePlan({ roomType: 'boardroom', seats: 99 }).seats, 20);
+  for (const preset of ['essential', 'standard', 'premium'] as const) {
+    const p = applyPreset(room, preset);
+    assert.equal(computeLayout(p).fits, true);
+    assert.ok(p.cameras !== 'none');
+  }
+  assert.equal(applyPreset(room, 'essential').displays, 1);
+  assert.equal(applyPreset(room, 'premium').cameras, 'three');
+  assert.ok(planSummary(room, 'x').includes('Boardroom, '));
+});
+
+test('the table shape travels in the link', () => {
+  for (const shape of ['rect', 'boat', 'round', 'u'] as const) {
+    const p = plan({ roomType: 'boardroom', shape, seats: 12 });
+    assert.deepEqual(decodePlan(encodePlan(p)), p);
+  }
+  assert.ok(planSummary(plan({ shape: 'u', seats: 12 }), 'x').includes('U-shaped table'));
+  assert.ok(planSummary(plan({ shape: 'boat', seats: 12 }), 'x').includes('boat-shaped table'));
 });

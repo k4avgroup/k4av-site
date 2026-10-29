@@ -7,7 +7,7 @@
 // tuned by someone who commissions these rooms; the planner is an indicative sketch, not an engineering drawing.
 
 export type Unit = 'm' | 'ft';
-export type TableShape = 'rect' | 'round';
+export type TableShape = 'rect' | 'boat' | 'round' | 'u';
 export type TablePosition = 'center' | 'back' | 'front';
 export type Speakers = 'none' | 'soundbar' | 'front' | 'ceiling';
 export type Mics = 'none' | 'integrated' | 'table' | 'ceiling';
@@ -17,7 +17,7 @@ export type MicShape = 'square' | 'round';
 export type Control = 'none' | 'table' | 'wall';
 export type RoomSystem = 'byod' | 'teams' | 'zoom' | 'webex' | 'meet';
 export type Preset = 'essential' | 'standard' | 'premium';
-export type RoomType = 'huddle' | 'conference' | 'training';
+export type RoomType = 'huddle' | 'conference' | 'boardroom' | 'training';
 export type Vec3 = [number, number, number];
 
 export type Plan = {
@@ -55,20 +55,37 @@ export const limits = {
   height: [2.3, 5],
 } as const;
 
-// What differs between the kinds of room: how many people, how big, and how much space around the furniture.
-export const roomTypes = {
+// What differs between the kinds of room: how many people, how big, how much space around the furniture, and which
+// tables make sense. The order here is the order of the buttons.
+type RoomKind = {
+  label: string;
+  noun: string; // "Huddle room", "Boardroom"
+  about: string;
+  seats: readonly [number, number];
+  length: readonly [number, number];
+  width: readonly [number, number];
+  front: number; // display wall to the table
+  back: number;
+  aisle: number; // space beside the table
+  shapes: readonly TableShape[];
+};
+
+export const roomTypes: Record<RoomType, RoomKind> = {
   huddle: {
     label: 'Huddle',
+    noun: 'Huddle room',
     about: 'A small room for 2 to 6 people, usually one screen and an all-in-one video bar.',
     seats: [2, 6],
     length: [2.5, 5.5],
     width: [2.5, 5.5],
-    front: 1.0, // display wall to the table
+    front: 1.0,
     back: 0.8,
-    aisle: 0.8, // space beside the table
+    aisle: 0.8,
+    shapes: ['rect', 'round'],
   },
   conference: {
     label: 'Conference',
+    noun: 'Conference room',
     about: 'A meeting room built around one table, for 2 to 24 people.',
     seats: [2, 24],
     length: [2.5, 12],
@@ -76,9 +93,23 @@ export const roomTypes = {
     front: 1.4,
     back: 1.0,
     aisle: 0.95,
+    shapes: ['rect', 'boat', 'round', 'u'],
+  },
+  boardroom: {
+    label: 'Boardroom',
+    noun: 'Boardroom',
+    about: 'A formal room around one large table for 8 to 20 people, usually with two displays and ceiling audio.',
+    seats: [8, 20],
+    length: [6, 12],
+    width: [4.5, 12],
+    front: 1.8,
+    back: 1.2,
+    aisle: 1.1,
+    shapes: ['boat', 'rect', 'u', 'round'],
   },
   training: {
     label: 'Training',
+    noun: 'Training room',
     about: 'A classroom with rows of desks facing the display and a presenter at the front, for 4 to 40 people.',
     seats: [4, 40],
     length: [4, 12],
@@ -86,8 +117,25 @@ export const roomTypes = {
     front: 2.2, // display wall to the first row: room for the presenter
     back: 0.9,
     aisle: 0.8,
+    shapes: ['rect'],
   },
-} as const;
+};
+
+// The four tables met most often in meeting rooms, and how many seats each suits.
+export const tableShapes: Record<TableShape, { label: string; about: string }> = {
+  rect: { label: 'Rectangular', about: 'The classic table, with a head and a foot.' },
+  boat: { label: 'Boat-shaped', about: 'Long with rounded ends, so everyone can see each other.' },
+  round: { label: 'Round', about: 'Equal seats for a small group.' },
+  u: { label: 'U-shaped', about: 'Open towards the display; people sit around the outside.' },
+};
+
+export function seatLimits(type: RoomType, shape: TableShape): [number, number] {
+  const [lo, hi] = roomTypes[type].seats;
+  if (shape === 'round') return [Math.max(3, lo), Math.min(14, hi)];
+  if (shape === 'boat') return [Math.max(4, lo), Math.min(20, hi)];
+  if (shape === 'u') return [Math.max(6, lo), hi];
+  return [lo, hi];
+}
 
 export const limitsFor = (type: RoomType) => ({ ...roomTypes[type], height: limits.height });
 
@@ -174,26 +222,26 @@ export function keepClear(plan: Plan, layout: Layout, x: number, z: number) {
   const range = presenterRange(plan.width, plan.length);
   const px = clamp(x, ...range.x);
   const pz = clamp(z, ...range.z);
-  const t = layout.table;
-  const reach = rules.chairOffset + 0.33; // table edge to the back of a chair
-  const free = (a: number, b: number) => a >= range.x[0] && a <= range.x[1] && b >= range.z[0] && b <= range.z[1];
+  const inside = (o: Obstacle, a: number, b: number) =>
+    o.k === 'rect' ? a > o.x0 && a < o.x1 && b > o.z0 && b < o.z1 : Math.hypot(a - o.x, b - o.z) < o.r;
+  const blocked = (a: number, b: number) => layout.keepOut.some((o) => inside(o, a, b));
+  const free = (a: number, b: number) =>
+    a >= range.x[0] && a <= range.x[1] && b >= range.z[0] && b <= range.z[1] && !blocked(a, b);
+  const hit = layout.keepOut.find((o) => inside(o, px, pz));
+  if (!hit) return { x: round2(px), z: round2(pz) };
+  const gap = 0.01; // step clear of the edge, so rounding cannot put the presenter back inside
   let options: [number, number][];
-  if (t.shape === 'round') {
-    const r = t.width / 2 + reach;
-    const d = Math.hypot(px - t.x, pz - t.z);
-    if (d >= r) return { x: round2(px), z: round2(pz) };
-    const ux = d === 0 ? 0 : (px - t.x) / d;
-    const uz = d === 0 ? -1 : (pz - t.z) / d;
-    options = [[t.x + ux * r, t.z + uz * r]];
+  if (hit.k === 'circle') {
+    const d = Math.hypot(px - hit.x, pz - hit.z);
+    const ux = d === 0 ? 0 : (px - hit.x) / d;
+    const uz = d === 0 ? -1 : (pz - hit.z) / d;
+    options = [[hit.x + ux * (hit.r + gap), hit.z + uz * (hit.r + gap)]];
   } else {
-    const hx = t.width / 2 + reach;
-    const hz = t.length / 2 + (layout.endChairs ? reach : 0.35);
-    if (Math.abs(px - t.x) >= hx || Math.abs(pz - t.z) >= hz) return { x: round2(px), z: round2(pz) };
     options = [
-      [t.x - hx, pz],
-      [t.x + hx, pz],
-      [px, t.z - hz],
-      [px, t.z + hz],
+      [hit.x0 - gap, pz],
+      [hit.x1 + gap, pz],
+      [px, hit.z0 - gap],
+      [px, hit.z1 + gap],
     ];
   }
   const best = options
@@ -248,6 +296,22 @@ export const templates = {
     tablePanels: true,
     control: 'table',
   },
+  boardroom: {
+    length: 10,
+    width: 7,
+    height: 3,
+    seats: 14,
+    shape: 'boat',
+    position: 'center',
+    endChairs: false,
+    presenter: false,
+    displays: 2,
+    speakers: 'ceiling',
+    mics: 'ceiling',
+    cameras: 'two',
+    tablePanels: true,
+    control: 'table',
+  },
   training: {
     length: 10,
     width: 8,
@@ -272,14 +336,13 @@ const numIn = (v: unknown, range: readonly [number, number], fallback: number) =
 // Clamps and repairs a plan, so anything that arrives from the address bar is safe to use.
 export function normalizePlan(input: Partial<Record<keyof Plan, unknown>> = {}): Plan {
   const d = defaultPlan;
-  const roomType = oneOf(input.roomType, ['huddle', 'conference', 'training'] as const, d.roomType);
+  const roomType = oneOf(input.roomType, ['huddle', 'conference', 'boardroom', 'training'] as const, d.roomType);
   const kind = roomTypes[roomType];
   const huddle = roomType === 'huddle';
   const training = roomType === 'training';
-  const shape = training ? 'rect' : oneOf(input.shape, ['rect', 'round'] as const, d.shape);
-  const seatRange: readonly [number, number] =
-    shape === 'round' ? [Math.max(3, kind.seats[0]), Math.min(14, kind.seats[1])] : kind.seats;
-  const seats = Math.round(numIn(input.seats, seatRange, templates[roomType].seats));
+  const wanted = oneOf(input.shape, ['rect', 'boat', 'round', 'u'] as const, templates[roomType].shape);
+  const shape: TableShape = kind.shapes.includes(wanted) ? wanted : templates[roomType].shape;
+  const seats = Math.round(numIn(input.seats, seatLimits(roomType, shape), templates[roomType].seats));
   const length = round2(numIn(input.length, kind.length, templates[roomType].length));
   const width = round2(numIn(input.width, kind.width, templates[roomType].width));
   const cameras = oneOf(
@@ -299,7 +362,10 @@ export function normalizePlan(input: Partial<Record<keyof Plan, unknown>> = {}):
     shape,
     seats,
     position: training ? 'center' : oneOf(input.position, ['center', 'back', 'front'] as const, d.position),
-    endChairs: roomType === 'conference' && shape === 'rect' ? bool(input.endChairs, d.endChairs) : false,
+    endChairs:
+      (roomType === 'conference' || roomType === 'boardroom') && (shape === 'rect' || shape === 'boat')
+        ? bool(input.endChairs, d.endChairs)
+        : false,
     presenter: huddle ? false : bool(input.presenter, d.presenter),
     presenterX: spot(input.presenterX, ...presenterRange(width, length).x),
     presenterZ: spot(input.presenterZ, ...presenterRange(width, length).z),
@@ -344,26 +410,89 @@ export function applyRoomType(plan: Plan, type: RoomType): Plan {
 
 export type Seat = { x: number; z: number; rot: number };
 export type TableBlock = { shape: TableShape; x: number; z: number; length: number; width: number };
+// Where a standing person cannot be: on the furniture or in the chairs around it.
+export type Obstacle =
+  { k: 'rect'; x0: number; x1: number; z0: number; z1: number } | { k: 'circle'; x: number; z: number; r: number };
 export type Layout = {
-  table: TableBlock; // the table, or for a classroom the block that holds every desk
-  tables: TableBlock[];
+  table: TableBlock; // the table, or the block that holds a U of tables or every desk of a classroom
+  tables: TableBlock[]; // the pieces that are drawn: one table, the three parts of a U, or a desk each
   seats: Seat[];
   endChairs: boolean;
   fits: boolean;
   rows: { count: number; perRow: number; desks: number } | null; // classrooms only
+  path: [number, number][]; // a line along the tabletop, where table microphones and connection panels go
+  touchSpot: [number, number]; // where a touch panel sits on the table
+  keepOut: Obstacle[];
 };
+
+const reach = rules.chairOffset + 0.33; // table edge to the back of a chair
+
+const pathLength = (path: [number, number][]) =>
+  path.slice(1).reduce((sum, p, i) => sum + Math.hypot(p[0] - path[i][0], p[1] - path[i][1]), 0);
+
+// `n` points spread evenly along a path, each in the middle of its share of it.
+export function alongPath(path: [number, number][], n: number): [number, number][] {
+  const out: [number, number][] = [];
+  const total = pathLength(path);
+  for (let i = 0; i < n; i++) {
+    let want = ((i + 0.5) / n) * total;
+    for (let k = 1; k < path.length; k++) {
+      const seg = Math.hypot(path[k][0] - path[k - 1][0], path[k][1] - path[k - 1][1]);
+      if (want <= seg || k === path.length - 1) {
+        const t = seg === 0 ? 0 : Math.min(1, want / seg);
+        out.push([
+          round2(path[k - 1][0] + (path[k][0] - path[k - 1][0]) * t),
+          round2(path[k - 1][1] + (path[k][1] - path[k - 1][1]) * t),
+        ]);
+        break;
+      }
+      want -= seg;
+    }
+  }
+  return out;
+}
+
+const lengthwise = (t: TableBlock): [number, number][] => [
+  [t.x, round2(t.z - t.length / 2)],
+  [t.x, round2(t.z + t.length / 2)],
+];
+const around = (t: TableBlock, ends: boolean): Obstacle => ({
+  k: 'rect',
+  x0: t.x - t.width / 2 - reach,
+  x1: t.x + t.width / 2 + reach,
+  z0: t.z - t.length / 2 - (ends ? reach : 0.35),
+  z1: t.z + t.length / 2 + (ends ? reach : 0.35),
+});
+
+// A U of tables: two arms and a base, open towards the display. People sit around the outside.
+function uDims(seats: number) {
+  const back = Math.max(2, Math.ceil(seats / 3));
+  const arms = seats - back;
+  const left = Math.ceil(arms / 2);
+  const right = Math.floor(arms / 2);
+  const depth = 0.9;
+  const width = round2(Math.max(3.0, back * rules.seatPitch + 0.2));
+  const arm = round2(Math.max(1.4, left * rules.seatPitch + 0.2));
+  return { back, left, right, depth, width, arm, length: round2(arm + depth) };
+}
 
 export function tableSize(shape: TableShape, seats: number, endChairs: boolean, small = false) {
   if (shape === 'round') {
     const d = round2(Math.max(small ? 1.0 : 1.2, (seats * rules.seatPitch) / Math.PI));
     return { length: d, width: d };
   }
+  if (shape === 'u') {
+    const u = uDims(seats);
+    return { length: u.length, width: u.width };
+  }
   const regular = Math.max(1, seats - (endChairs ? 2 : 0));
   const perSide = Math.ceil(regular / 2);
-  return {
-    length: round2(Math.max(small ? 1.2 : 1.4, perSide * rules.seatPitch + 0.2)),
-    width: small ? 1.0 : seats <= 8 ? 1.2 : seats <= 14 ? 1.4 : 1.6,
-  };
+  const width = small ? 1.0 : seats <= 8 ? 1.2 : seats <= 14 ? 1.4 : 1.6;
+  if (shape === 'boat') {
+    const bulge = round2(width + 0.2);
+    return { length: round2(Math.max(2.2, perSide * rules.seatPitch + 0.2 + bulge)), width: bulge };
+  }
+  return { length: round2(Math.max(small ? 1.2 : 1.4, perSide * rules.seatPitch + 0.2)), width };
 }
 
 const facing = (dx: number, dz: number) => Math.atan2(dx, dz);
@@ -399,27 +528,92 @@ function classroomLayout(plan: Plan): Layout {
   const minZ = Math.min(...tables.map((t) => t.z - t.length / 2));
   const maxZ = Math.max(...tables.map((t) => t.z + t.length / 2));
   const lastChair = Math.max(...seats.map((s) => s.z)) + 0.25;
+  const table: TableBlock = {
+    shape: 'rect',
+    x: round2((minX + maxX) / 2),
+    z: round2((minZ + maxZ) / 2),
+    length: round2(maxZ - minZ),
+    width: round2(maxX - minX),
+  };
   return {
-    table: {
-      shape: 'rect',
-      x: round2((minX + maxX) / 2),
-      z: round2((minZ + maxZ) / 2),
-      length: round2(maxZ - minZ),
-      width: round2(maxX - minX),
-    },
+    table,
     tables,
     seats,
     endChairs: true,
     fits: lastChair <= L / 2 - 0.6 && maxX - minX <= W - 1.2,
     rows: { count, perRow, desks: tables.length },
+    path: lengthwise(table),
+    touchSpot: [0.35, round2(table.z - table.length / 2 + 0.4)],
+    keepOut: [around(table, true)],
+  };
+}
+
+function uLayout(plan: Plan): Layout {
+  const { length: L, width: W } = plan;
+  const kind = roomTypes[plan.roomType];
+  const u = uDims(plan.seats);
+  const zMin = -L / 2 + kind.front + u.length / 2;
+  const zMax = L / 2 - kind.back - 0.5 - u.length / 2; // chairs stand behind the base
+  const fitsLength = zMin <= zMax;
+  const fits = fitsLength && u.width + 2 * kind.aisle <= W;
+  let tz = 0;
+  if (fitsLength) tz = plan.position === 'front' ? zMin : plan.position === 'back' ? zMax : clamp(0, zMin, zMax);
+  const zFront = tz - u.length / 2;
+  const zBase = tz + u.length / 2 - u.depth / 2;
+  const armX = u.width / 2 - u.depth / 2;
+  const armZ = round2(zFront + u.arm / 2);
+  const tables: TableBlock[] = [
+    { shape: 'rect', x: round2(-armX), z: armZ, length: u.arm, width: u.depth },
+    { shape: 'rect', x: round2(armX), z: armZ, length: u.arm, width: u.depth },
+    { shape: 'rect', x: 0, z: round2(zBase), length: u.depth, width: u.width },
+  ];
+  const seats: Seat[] = [];
+  const along = (count: number, x: number, rot: number) => {
+    for (let i = 0; i < count; i++) {
+      seats.push({ x: round2(x), z: round2(zFront + ((i + 0.5) * u.arm) / count), rot });
+    }
+  };
+  along(u.left, -(u.width / 2 + rules.chairOffset), facing(1, 0));
+  along(u.right, u.width / 2 + rules.chairOffset, facing(-1, 0));
+  const usable = u.width - 0.7;
+  for (let i = 0; i < u.back; i++) {
+    seats.push({
+      x: round2(-usable / 2 + ((i + 0.5) * usable) / u.back),
+      z: round2(zBase + u.depth / 2 + rules.chairOffset),
+      rot: facing(0, -1),
+    });
+  }
+  const outer = u.width / 2 + reach;
+  const inner = u.width / 2 - u.depth - 0.3;
+  return {
+    table: { shape: 'u', x: 0, z: round2(tz), length: u.length, width: u.width },
+    tables,
+    seats,
+    endChairs: true,
+    fits,
+    rows: null,
+    path: [
+      [round2(-armX), round2(zFront + 0.2)],
+      [round2(-armX), round2(zBase)],
+      [round2(armX), round2(zBase)],
+      [round2(armX), round2(zFront + 0.2)],
+    ],
+    touchSpot: [0.35, round2(zBase - 0.1)],
+    keepOut: [
+      { k: 'rect', x0: -outer, x1: -inner, z0: zFront - 0.35, z1: zBase },
+      { k: 'rect', x0: inner, x1: outer, z0: zFront - 0.35, z1: zBase },
+      { k: 'rect', x0: -outer, x1: outer, z0: zBase - u.depth / 2 - 0.3, z1: zBase + u.depth / 2 + reach },
+    ],
   };
 }
 
 export function computeLayout(plan: Plan): Layout {
   if (plan.roomType === 'training') return classroomLayout(plan);
+  if (plan.shape === 'u') return uLayout(plan);
   const { length: L, width: W } = plan;
   const kind = roomTypes[plan.roomType];
-  const ends = plan.shape === 'rect' && plan.endChairs && plan.seats >= 4;
+  const lengthways = plan.shape === 'rect' || plan.shape === 'boat';
+  const ends = lengthways && plan.endChairs && plan.seats >= 4;
   const dim = tableSize(plan.shape, plan.seats, ends, plan.roomType === 'huddle');
   const endExtra = ends ? 0.7 : 0;
   const zMin = -L / 2 + kind.front + endExtra + dim.length / 2;
@@ -441,9 +635,11 @@ export function computeLayout(plan: Plan): Layout {
     const regular = plan.seats - (ends ? 2 : 0);
     const left = Math.ceil(regular / 2);
     const right = Math.floor(regular / 2);
+    // along a boat-shaped table the chairs stand beside the straight part, between the rounded ends
+    const span = plan.shape === 'boat' ? dim.length - dim.width : dim.length;
     const side = (count: number, x: number, rot: number) => {
       for (let i = 0; i < count; i++) {
-        seats.push({ x: round2(x), z: round2(tz - dim.length / 2 + ((i + 0.5) * dim.length) / count), rot });
+        seats.push({ x: round2(x), z: round2(tz - span / 2 + ((i + 0.5) * span) / count), rot });
       }
     };
     const off = dim.width / 2 + rules.chairOffset;
@@ -455,8 +651,21 @@ export function computeLayout(plan: Plan): Layout {
     }
   }
   const table: TableBlock = { shape: plan.shape, x: 0, z: round2(tz), length: dim.length, width: dim.width };
-  return { table, tables: [table], seats, endChairs: ends, fits, rows: null };
+  const keepOut: Obstacle[] =
+    plan.shape === 'round' ? [{ k: 'circle', x: 0, z: table.z, r: table.width / 2 + reach }] : [around(table, ends)];
+  return {
+    table,
+    tables: [table],
+    seats,
+    endChairs: ends,
+    fits,
+    rows: null,
+    path: lengthwise(table),
+    touchSpot: [0.35, round2(table.z - table.length / 2 + 0.4)],
+    keepOut,
+  };
 }
+
 // ---------------------------------------------------------------- displays
 
 export type DisplayInfo = {
@@ -571,7 +780,7 @@ export function computeEquipment(plan: Plan, layout: Layout, d: DisplayInfo): Eq
   } else if (plan.mics === 'table') {
     micRadius = 1.4;
     const n = Math.max(1, Math.ceil(plan.seats / rules.tableMicEvery));
-    for (let i = 0; i < n; i++) mics.push([0, 0.78, round2(t.z + ((i + 0.5) / n - 0.5) * t.length)]);
+    for (const [x, z] of alongPath(layout.path, n)) mics.push([x, 0.78, z]);
   } else if (plan.mics === 'integrated') {
     micRadius = 4.5;
   }
@@ -608,11 +817,11 @@ export function computeEquipment(plan: Plan, layout: Layout, d: DisplayInfo): Eq
   }
   const panels: Vec3[] = [];
   if (plan.tablePanels) {
-    const n = Math.max(1, Math.ceil(t.length / rules.panelEvery));
-    for (let i = 0; i < n; i++) panels.push([0, 0.765, round2(t.z + ((i + 0.5) / n - 0.5) * t.length)]);
+    const n = Math.max(1, Math.ceil(pathLength(layout.path) / rules.panelEvery));
+    for (const [x, z] of alongPath(layout.path, n)) panels.push([x, 0.765, z]);
   }
   let control: Vec3 | null = null;
-  if (plan.control === 'table') control = [0.35, 0.78, round2(t.z - t.length / 2 + 0.4)];
+  if (plan.control === 'table') control = [layout.touchSpot[0], 0.78, layout.touchSpot[1]];
   if (plan.control === 'wall') control = [-W / 2 + 0.04, 1.35, round2(L / 2 - 1.0)];
 
   return { speakers, speakerTargets, speakerRadius, soundbar, mics, micRadius, cameras, panels, control };
@@ -713,6 +922,26 @@ export function analyze(plan: Plan): Analysis {
 
 // What each package adds to a room, for each kind of room.
 const presetChoices: Record<RoomType, Record<Preset, Partial<Plan>>> = {
+  boardroom: {
+    essential: { displays: 1, speakers: 'front', mics: 'ceiling', cameras: 'two', tablePanels: true, control: 'table' },
+    standard: {
+      displays: 2,
+      speakers: 'ceiling',
+      mics: 'ceiling',
+      cameras: 'two',
+      tablePanels: true,
+      control: 'table',
+    },
+    premium: {
+      displays: 2,
+      speakers: 'ceiling',
+      mics: 'ceiling',
+      cameras: 'three',
+      tablePanels: true,
+      control: 'table',
+      presenter: true,
+    },
+  },
   huddle: {
     essential: { speakers: 'soundbar', mics: 'integrated', cameras: 'one', tablePanels: false, control: 'none' },
     standard: { speakers: 'soundbar', mics: 'table', cameras: 'one', tablePanels: true, control: 'table' },
@@ -752,6 +981,11 @@ const presetChoices: Record<RoomType, Record<Preset, Partial<Plan>>> = {
 };
 
 export const presetText: Record<RoomType, Record<Preset, string>> = {
+  boardroom: {
+    essential: 'One display, wall speakers, ceiling microphones, two PTZ cameras',
+    standard: 'Two displays, ceiling audio, two PTZ cameras, table touch panel',
+    premium: 'Two displays, ceiling audio, three PTZ cameras that follow the presenter, table panels',
+  },
   huddle: {
     essential: 'Soundbar with built-in microphones and one PTZ camera',
     standard: 'Soundbar, table microphone, one PTZ camera, touch panel',
@@ -833,10 +1067,17 @@ export function decodePlan(text: string): Plan | null {
   }
 }
 
+const tableWord: Record<TableShape, string> = {
+  rect: 'rectangular',
+  boat: 'boat-shaped',
+  round: 'round',
+  u: 'U-shaped',
+};
+
 const roomLine = (plan: Plan) =>
   plan.roomType === 'training'
     ? `Training room, ${plan.seats} seats in rows of desks.`
-    : `${roomTypes[plan.roomType].label} room, ${plan.seats} seats at a ${plan.shape === 'round' ? 'round' : 'rectangular'} table.`;
+    : `${roomTypes[plan.roomType].noun}, ${plan.seats} seats at a ${tableWord[plan.shape]} table.`;
 
 // A short text for the request form. The plan link goes first so it survives the form's length limit.
 export function planSummary(plan: Plan, link: string): string {

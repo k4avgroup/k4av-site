@@ -8,15 +8,18 @@ import {
   defaultPlan,
   formatLength,
   normalizePlan,
+  roomTypes,
   rules,
 } from '../lib/planner/model.ts';
 
 const base = normalizePlan(defaultPlan);
-const rooms = (['huddle', 'conference', 'training'] as const).flatMap((type) =>
-  (['essential', 'standard', 'premium'] as const).map((preset) => ({
-    label: `${type} ${preset}`,
-    plan: applyPreset(applyRoomType(base, type), preset),
-  })),
+const rooms = (['huddle', 'conference', 'boardroom', 'training'] as const).flatMap((type) =>
+  roomTypes[type].shapes.flatMap((shape) =>
+    (['essential', 'standard', 'premium'] as const).map((preset) => ({
+      label: `${type} ${shape} ${preset}`,
+      plan: normalizePlan({ ...applyPreset(applyRoomType(base, type), preset), shape }),
+    })),
+  ),
 );
 const texts = (d: Drawing) => d.prims.filter((p): p is Extract<Prim, { k: 'text' }> => p.k === 'text').map((p) => p.t);
 const count = (d: Drawing, style: string, kind?: string) =>
