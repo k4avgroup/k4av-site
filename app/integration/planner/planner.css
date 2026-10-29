@@ -326,6 +326,62 @@
   overflow: auto;
   background: #14181e;
 }
+.planner-plans-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 84px 14px 14px;
+  background: #e9edf1;
+  overflow: hidden;
+}
+.planner-plans {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  height: 100%;
+}
+.planner-plans-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.planner-plans-tabs button,
+.planner-plans-actions button {
+  padding: 7px 12px;
+  border: 1px solid #b7c0ca;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2933;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.planner-plans-tabs button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.planner-plans-paper {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.planner-plans-paper svg {
+  display: block;
+  width: 100%;
+  min-width: 560px;
+  height: auto;
+  border: 1px solid #c9d1d9;
+  border-radius: 4px;
+  background: #fff;
+}
+.planner-plans-actions {
+  display: flex;
+  justify-content: flex-end;
+}
 .planner-flow svg {
   display: block;
   width: 100%;

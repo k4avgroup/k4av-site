@@ -17,9 +17,11 @@ export type MicShape = 'square' | 'round';
 export type Control = 'none' | 'table' | 'wall';
 export type RoomSystem = 'byod' | 'teams' | 'zoom' | 'webex' | 'meet';
 export type Preset = 'essential' | 'standard' | 'premium';
+export type RoomType = 'huddle' | 'conference' | 'training';
 export type Vec3 = [number, number, number];
 
 export type Plan = {
+  roomType: RoomType;
   unit: Unit;
   length: number;
   width: number;
@@ -50,18 +52,51 @@ export type Plan = {
 };
 
 export const limits = {
-  length: [2.5, 12],
-  width: [2.5, 12],
   height: [2.3, 5],
-  seats: [2, 24],
 } as const;
+
+// What differs between the kinds of room: how many people, how big, and how much space around the furniture.
+export const roomTypes = {
+  huddle: {
+    label: 'Huddle',
+    about: 'A small room for 2 to 6 people, usually one screen and an all-in-one video bar.',
+    seats: [2, 6],
+    length: [2.5, 5.5],
+    width: [2.5, 5.5],
+    front: 1.0, // display wall to the table
+    back: 0.8,
+    aisle: 0.8, // space beside the table
+  },
+  conference: {
+    label: 'Conference',
+    about: 'A meeting room built around one table, for 2 to 24 people.',
+    seats: [2, 24],
+    length: [2.5, 12],
+    width: [2.5, 12],
+    front: 1.4,
+    back: 1.0,
+    aisle: 0.95,
+  },
+  training: {
+    label: 'Training',
+    about: 'A classroom with rows of desks facing the display and a presenter at the front, for 4 to 40 people.',
+    seats: [4, 40],
+    length: [4, 12],
+    width: [4, 12],
+    front: 2.2, // display wall to the first row: room for the presenter
+    back: 0.9,
+    aisle: 0.8,
+  },
+} as const;
+
+export const limitsFor = (type: RoomType) => ({ ...roomTypes[type], height: limits.height });
+
+// Classroom furniture: a desk seats two, rows are a little over a metre apart.
+const desk = { width: 1.8, depth: 0.6, gap: 0.1, rowPitch: 1.3, chairBehind: 0.35 };
 
 export const rules = {
   seatPitch: 0.7, // metres of table edge per person
   chairOffset: 0.42, // table edge to chair centre
-  frontClearance: 1.4, // display wall to the table
-  backClearance: 1.0,
-  aisle: 0.95, // space behind a chair
   earHeight: 1.2, // seated head height: the "listening plane"
   displayCenterHeight: 1.5,
   displayBottomMin: 0.9,
@@ -82,6 +117,7 @@ export const rules = {
 } as const;
 
 export const defaultPlan: Plan = {
+  roomType: 'conference',
   unit: 'm',
   length: 8,
   width: 6,
@@ -178,27 +214,96 @@ export function presenterSpot(plan: Plan, displays: { count: 1 | 2; width: numbe
   );
 }
 
+// A starting point for each kind of room. Choosing a room type applies it.
+export const templates = {
+  huddle: {
+    length: 4,
+    width: 3.5,
+    height: 2.7,
+    seats: 4,
+    shape: 'rect',
+    position: 'center',
+    endChairs: false,
+    presenter: false,
+    displays: 1,
+    speakers: 'soundbar',
+    mics: 'integrated',
+    cameras: 'one',
+    tablePanels: true,
+    control: 'none',
+  },
+  conference: {
+    length: 8,
+    width: 6,
+    height: 3,
+    seats: 8,
+    shape: 'rect',
+    position: 'center',
+    endChairs: false,
+    presenter: false,
+    displays: 1,
+    speakers: 'front',
+    mics: 'ceiling',
+    cameras: 'one',
+    tablePanels: true,
+    control: 'table',
+  },
+  training: {
+    length: 10,
+    width: 8,
+    height: 3,
+    seats: 24,
+    shape: 'rect',
+    position: 'center',
+    endChairs: false,
+    presenter: true,
+    displays: 1,
+    speakers: 'front',
+    mics: 'ceiling',
+    cameras: 'two',
+    tablePanels: false,
+    control: 'wall',
+  },
+} as const satisfies Record<RoomType, Partial<Plan>>;
+
+const numIn = (v: unknown, range: readonly [number, number], fallback: number) =>
+  typeof v === 'number' && Number.isFinite(v) ? clamp(v, range[0], range[1]) : clamp(fallback, range[0], range[1]);
+
 // Clamps and repairs a plan, so anything that arrives from the address bar is safe to use.
 export function normalizePlan(input: Partial<Record<keyof Plan, unknown>> = {}): Plan {
   const d = defaultPlan;
-  const shape = oneOf(input.shape, ['rect', 'round'] as const, d.shape);
-  const seats = Math.round(num(input.seats, limits.seats[0], limits.seats[1], d.seats));
-  const length = round2(num(input.length, limits.length[0], limits.length[1], d.length));
-  const width = round2(num(input.width, limits.width[0], limits.width[1], d.width));
+  const roomType = oneOf(input.roomType, ['huddle', 'conference', 'training'] as const, d.roomType);
+  const kind = roomTypes[roomType];
+  const huddle = roomType === 'huddle';
+  const training = roomType === 'training';
+  const shape = training ? 'rect' : oneOf(input.shape, ['rect', 'round'] as const, d.shape);
+  const seatRange: readonly [number, number] =
+    shape === 'round' ? [Math.max(3, kind.seats[0]), Math.min(14, kind.seats[1])] : kind.seats;
+  const seats = Math.round(numIn(input.seats, seatRange, templates[roomType].seats));
+  const length = round2(numIn(input.length, kind.length, templates[roomType].length));
+  const width = round2(numIn(input.width, kind.width, templates[roomType].width));
+  const cameras = oneOf(
+    input.cameras === 'four' ? 'three' : input.cameras,
+    ['none', 'one', 'two', 'three'] as const,
+    d.cameras,
+  );
+  const mics = oneOf(input.mics, ['none', 'integrated', 'table', 'ceiling'] as const, d.mics);
+  const control = oneOf(input.control, ['none', 'table', 'wall'] as const, d.control);
   return {
+    roomType,
     unit: oneOf(input.unit, ['m', 'ft'] as const, d.unit),
     length,
     width,
     height: round2(num(input.height, limits.height[0], limits.height[1], d.height)),
     ceiling: bool(input.ceiling, d.ceiling),
     shape,
-    seats: shape === 'round' ? clamp(seats, 3, 14) : seats,
-    position: oneOf(input.position, ['center', 'back', 'front'] as const, d.position),
-    endChairs: bool(input.endChairs, d.endChairs),
-    presenter: bool(input.presenter, d.presenter),
+    seats,
+    position: training ? 'center' : oneOf(input.position, ['center', 'back', 'front'] as const, d.position),
+    endChairs: roomType === 'conference' && shape === 'rect' ? bool(input.endChairs, d.endChairs) : false,
+    presenter: huddle ? false : bool(input.presenter, d.presenter),
     presenterX: spot(input.presenterX, ...presenterRange(width, length).x),
     presenterZ: spot(input.presenterZ, ...presenterRange(width, length).z),
-    displays: input.displays === 2 ? 2 : 1,
+    displays: huddle ? 1 : input.displays === 2 ? 2 : 1,
     displaySize:
       typeof input.displaySize === 'number' && (rules.sizes as readonly number[]).includes(input.displaySize)
         ? input.displaySize
@@ -207,56 +312,120 @@ export function normalizePlan(input: Partial<Record<keyof Plan, unknown>> = {}):
     speakers: oneOf(input.speakers, ['none', 'soundbar', 'front', 'ceiling'] as const, d.speakers),
     speakerCones: bool(input.speakerCones, d.speakerCones),
     listeningPlane: bool(input.listeningPlane, d.listeningPlane),
-    mics: oneOf(input.mics, ['none', 'integrated', 'table', 'ceiling'] as const, d.mics),
+    mics: training && mics === 'table' ? 'ceiling' : mics,
     micShape: oneOf(input.micShape, ['square', 'round'] as const, d.micShape),
     micCoverage: bool(input.micCoverage, d.micCoverage),
-    cameras: oneOf(
-      input.cameras === 'four' ? 'three' : input.cameras,
-      ['none', 'one', 'two', 'three'] as const,
-      d.cameras,
-    ),
+    cameras: huddle && cameras === 'three' ? 'two' : cameras,
     cameraSpot: oneOf(input.cameraSpot, ['above', 'below'] as const, d.cameraSpot),
     cameraView: bool(input.cameraView, d.cameraView),
-    tablePanels: bool(input.tablePanels, d.tablePanels),
-    control: oneOf(input.control, ['none', 'table', 'wall'] as const, d.control),
+    tablePanels: training ? false : bool(input.tablePanels, d.tablePanels),
+    control: training && control === 'table' ? 'wall' : control,
     system: oneOf(input.system, ['byod', 'teams', 'zoom', 'webex', 'meet'] as const, d.system),
   };
 }
 
+// Switches to another kind of room: its size, furniture and equipment start from that room's template.
+export function applyRoomType(plan: Plan, type: RoomType): Plan {
+  return normalizePlan({
+    ...plan,
+    ...templates[type],
+    roomType: type,
+    displaySize: null,
+    presenterX: null,
+    presenterZ: null,
+    cameraSpot: 'above',
+    speakerCones: false,
+    micCoverage: false,
+    cameraView: false,
+    listeningPlane: false,
+  });
+}
 // ---------------------------------------------------------------- table, chairs and where they stand
 
 export type Seat = { x: number; z: number; rot: number };
+export type TableBlock = { shape: TableShape; x: number; z: number; length: number; width: number };
 export type Layout = {
-  table: { shape: TableShape; x: number; z: number; length: number; width: number };
+  table: TableBlock; // the table, or for a classroom the block that holds every desk
+  tables: TableBlock[];
   seats: Seat[];
   endChairs: boolean;
   fits: boolean;
+  rows: { count: number; perRow: number; desks: number } | null; // classrooms only
 };
 
-export function tableSize(shape: TableShape, seats: number, endChairs: boolean) {
+export function tableSize(shape: TableShape, seats: number, endChairs: boolean, small = false) {
   if (shape === 'round') {
-    const d = round2(Math.max(1.2, (seats * rules.seatPitch) / Math.PI));
+    const d = round2(Math.max(small ? 1.0 : 1.2, (seats * rules.seatPitch) / Math.PI));
     return { length: d, width: d };
   }
   const regular = Math.max(1, seats - (endChairs ? 2 : 0));
   const perSide = Math.ceil(regular / 2);
   return {
-    length: round2(Math.max(1.4, perSide * rules.seatPitch + 0.2)),
-    width: seats <= 8 ? 1.2 : seats <= 14 ? 1.4 : 1.6,
+    length: round2(Math.max(small ? 1.2 : 1.4, perSide * rules.seatPitch + 0.2)),
+    width: small ? 1.0 : seats <= 8 ? 1.2 : seats <= 14 ? 1.4 : 1.6,
   };
 }
 
 const facing = (dx: number, dz: number) => Math.atan2(dx, dz);
 
-export function computeLayout(plan: Plan): Layout {
+// Rows of two-seat desks facing the display, centred, with the front row clear of the presenter.
+function classroomLayout(plan: Plan): Layout {
   const { length: L, width: W } = plan;
+  const kind = roomTypes.training;
+  const perDeskRow = Math.max(1, Math.floor((W - 2 * kind.aisle + desk.gap) / (desk.width + desk.gap)));
+  const count = Math.max(1, Math.ceil(plan.seats / (perDeskRow * 2)));
+  const perRow = Math.ceil(plan.seats / count);
+  const tables: TableBlock[] = [];
+  const seats: Seat[] = [];
+  const z0 = -L / 2 + kind.front + desk.depth / 2;
+  let left = plan.seats;
+  for (let r = 0; r < count; r++) {
+    const n = Math.min(left, perRow);
+    left -= n;
+    const desks = Math.ceil(n / 2);
+    const rowWidth = desks * desk.width + (desks - 1) * desk.gap;
+    const z = z0 + r * desk.rowPitch;
+    for (let k = 0; k < desks; k++) {
+      const x = -rowWidth / 2 + desk.width / 2 + k * (desk.width + desk.gap);
+      tables.push({ shape: 'rect', x: round2(x), z: round2(z), length: desk.depth, width: desk.width });
+      const offsets = n - 2 * k >= 2 ? [-0.45, 0.45] : [0];
+      for (const o of offsets) {
+        seats.push({ x: round2(x + o), z: round2(z + desk.depth / 2 + desk.chairBehind), rot: Math.PI });
+      }
+    }
+  }
+  const minX = Math.min(...tables.map((t) => t.x - t.width / 2));
+  const maxX = Math.max(...tables.map((t) => t.x + t.width / 2));
+  const minZ = Math.min(...tables.map((t) => t.z - t.length / 2));
+  const maxZ = Math.max(...tables.map((t) => t.z + t.length / 2));
+  const lastChair = Math.max(...seats.map((s) => s.z)) + 0.25;
+  return {
+    table: {
+      shape: 'rect',
+      x: round2((minX + maxX) / 2),
+      z: round2((minZ + maxZ) / 2),
+      length: round2(maxZ - minZ),
+      width: round2(maxX - minX),
+    },
+    tables,
+    seats,
+    endChairs: true,
+    fits: lastChair <= L / 2 - 0.6 && maxX - minX <= W - 1.2,
+    rows: { count, perRow, desks: tables.length },
+  };
+}
+
+export function computeLayout(plan: Plan): Layout {
+  if (plan.roomType === 'training') return classroomLayout(plan);
+  const { length: L, width: W } = plan;
+  const kind = roomTypes[plan.roomType];
   const ends = plan.shape === 'rect' && plan.endChairs && plan.seats >= 4;
-  const dim = tableSize(plan.shape, plan.seats, ends);
+  const dim = tableSize(plan.shape, plan.seats, ends, plan.roomType === 'huddle');
   const endExtra = ends ? 0.7 : 0;
-  const zMin = -L / 2 + rules.frontClearance + endExtra + dim.length / 2;
-  const zMax = L / 2 - rules.backClearance - endExtra - dim.length / 2;
+  const zMin = -L / 2 + kind.front + endExtra + dim.length / 2;
+  const zMax = L / 2 - kind.back - endExtra - dim.length / 2;
   const fitsLength = zMin <= zMax;
-  const fits = fitsLength && dim.width + 2 * rules.aisle <= W;
+  const fits = fitsLength && dim.width + 2 * kind.aisle <= W;
   let tz = 0;
   if (fitsLength) tz = plan.position === 'front' ? zMin : plan.position === 'back' ? zMax : clamp(0, zMin, zMax);
   const seats: Seat[] = [];
@@ -285,14 +454,9 @@ export function computeLayout(plan: Plan): Layout {
       seats.push({ x: 0, z: round2(tz + dim.length / 2 + rules.chairOffset), rot: facing(0, -1) });
     }
   }
-  return {
-    table: { shape: plan.shape, x: 0, z: round2(tz), length: dim.length, width: dim.width },
-    seats,
-    endChairs: ends,
-    fits,
-  };
+  const table: TableBlock = { shape: plan.shape, x: 0, z: round2(tz), length: dim.length, width: dim.width };
+  return { table, tables: [table], seats, endChairs: ends, fits, rows: null };
 }
-
 // ---------------------------------------------------------------- displays
 
 export type DisplayInfo = {
@@ -547,48 +711,75 @@ export function analyze(plan: Plan): Analysis {
 
 // ---------------------------------------------------------------- packages as starting points
 
-export function applyPreset(plan: Plan, preset: Preset): Plan {
-  const base = {
-    ...plan,
-    displaySize: null,
-    speakerCones: false,
-    micCoverage: false,
-    cameraView: false,
-    listeningPlane: false,
-  };
-  if (preset === 'essential') {
-    return normalizePlan({
-      ...base,
+// What each package adds to a room, for each kind of room.
+const presetChoices: Record<RoomType, Record<Preset, Partial<Plan>>> = {
+  huddle: {
+    essential: { speakers: 'soundbar', mics: 'integrated', cameras: 'one', tablePanels: false, control: 'none' },
+    standard: { speakers: 'soundbar', mics: 'table', cameras: 'one', tablePanels: true, control: 'table' },
+    premium: { speakers: 'front', mics: 'ceiling', cameras: 'two', tablePanels: true, control: 'table' },
+  },
+  conference: {
+    essential: {
       displays: 1,
       speakers: 'soundbar',
       mics: 'integrated',
       cameras: 'one',
       tablePanels: false,
       control: 'none',
-    });
-  }
-  if (preset === 'standard') {
-    return normalizePlan({
-      ...base,
+    },
+    standard: {
       displays: 1,
       speakers: 'front',
       mics: 'ceiling',
       cameras: 'two',
       tablePanels: true,
       control: 'table',
-    });
-  }
+    },
+    premium: {
+      displays: 2,
+      speakers: 'ceiling',
+      mics: 'ceiling',
+      cameras: 'three',
+      tablePanels: true,
+      control: 'table',
+    },
+  },
+  training: {
+    essential: { displays: 1, speakers: 'front', mics: 'integrated', cameras: 'one', control: 'none' },
+    standard: { displays: 1, speakers: 'front', mics: 'ceiling', cameras: 'two', control: 'wall' },
+    premium: { displays: 2, speakers: 'ceiling', mics: 'ceiling', cameras: 'three', control: 'wall', presenter: true },
+  },
+};
+
+export const presetText: Record<RoomType, Record<Preset, string>> = {
+  huddle: {
+    essential: 'Soundbar with built-in microphones and one PTZ camera',
+    standard: 'Soundbar, table microphone, one PTZ camera, touch panel',
+    premium: 'Wall speakers, ceiling microphone, two PTZ cameras, touch panel',
+  },
+  conference: {
+    essential: 'Soundbar, built-in microphones, one PTZ camera',
+    standard: 'Wall speakers, ceiling microphones, two PTZ cameras, touch panel',
+    premium: 'Two displays, ceiling audio, three PTZ cameras, touch panel',
+  },
+  training: {
+    essential: 'Wall speakers, built-in microphones, one PTZ camera',
+    standard: 'Wall speakers, ceiling microphones, two PTZ cameras, wall touch panel',
+    premium: 'Two displays, ceiling audio, three PTZ cameras that follow the presenter, wall touch panel',
+  },
+};
+
+export function applyPreset(plan: Plan, preset: Preset): Plan {
   return normalizePlan({
-    ...base,
-    displays: 2,
-    speakers: 'ceiling',
-    mics: 'ceiling',
-    cameras: 'three',
-    tablePanels: true,
-    control: 'table',
+    ...plan,
+    displaySize: null,
+    speakerCones: false,
+    micCoverage: false,
+    cameraView: false,
+    listeningPlane: false,
+    ...presetChoices[plan.roomType][preset],
   });
 }
-
 // ---------------------------------------------------------------- sharing
 
 const KEYS = [
@@ -619,6 +810,7 @@ const KEYS = [
   'presenterZ',
   'cameraSpot',
   'micShape',
+  'roomType',
 ] as const satisfies readonly (keyof Plan)[];
 
 export function encodePlan(plan: Plan): string {
@@ -641,6 +833,11 @@ export function decodePlan(text: string): Plan | null {
   }
 }
 
+const roomLine = (plan: Plan) =>
+  plan.roomType === 'training'
+    ? `Training room, ${plan.seats} seats in rows of desks.`
+    : `${roomTypes[plan.roomType].label} room, ${plan.seats} seats at a ${plan.shape === 'round' ? 'round' : 'rectangular'} table.`;
+
 // A short text for the request form. The plan link goes first so it survives the form's length limit.
 export function planSummary(plan: Plan, link: string): string {
   const a = analyze(plan);
@@ -648,7 +845,7 @@ export function planSummary(plan: Plan, link: string): string {
   const lines = [
     `Room planner (pilot): ${link}`,
     `Room ${formatLength(plan.length, u)} x ${formatLength(plan.width, u)}, ceiling ${formatLength(plan.height, u)}.`,
-    `Table: ${plan.shape === 'round' ? 'round' : 'rectangular'}, ${plan.seats} seats.`,
+    roomLine(plan),
     ...a.items.filter((i) => !i.name.startsWith('Installation')).map((i) => `${i.qty} x ${i.name}`),
   ];
   return lines.join('\n').slice(0, 900);

@@ -84,6 +84,17 @@ function Controls({ plan, view }: { plan: Plan; view: ViewState }) {
     invalidate();
   }, [view, camera, invalidate]);
 
+  // A bigger or smaller room (or another kind of room) is framed again, so it never looks lost in the picture.
+  useEffect(() => {
+    const c = controls.current;
+    if (!c) return;
+    const pose = viewPose(planRef.current, view.name);
+    camera.position.set(...pose.position);
+    c.target.set(...pose.target);
+    c.update();
+    invalidate();
+  }, [plan.length, plan.width, plan.height, view.name, camera, invalidate]);
+
   return null;
 }
 
@@ -805,7 +816,9 @@ export default function PlannerScene({
       <ambientLight intensity={1.15} />
       <directionalLight position={[6, 10, 8]} intensity={1.3} />
       <Room plan={plan} />
-      <Table table={layout.table} />
+      {layout.tables.map((t, i) => (
+        <Table key={i} table={t} />
+      ))}
       {layout.seats.map((s, i) => (
         <Chair key={i} x={s.x} z={s.z} rot={s.rot} />
       ))}

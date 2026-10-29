@@ -3,6 +3,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   analyze,
   applyPreset,
+  applyRoomType,
   computeLayout,
   decodePlan,
   defaultPlan,
@@ -10,16 +11,19 @@ import {
   formatLength,
   fromUnit,
   keepClear,
-  limits,
+  limitsFor,
   normalizePlan,
   planSummary,
+  presetText,
+  roomTypes,
   rules,
   tableSize,
   toUnit,
   type Plan,
-  type Preset,
+  type RoomType,
 } from '@/lib/planner/model';
 import PlannerScene, { type Capture, type ViewName, type ViewState } from './scene';
+import PlanDrawings from './plan-drawings';
 import SignalFlow from './signal-flow';
 
 const steps = ['Room', 'Layout', 'Display', 'Audio', 'Video', 'Control', 'Summary'] as const;
@@ -164,12 +168,6 @@ function Count({
   );
 }
 
-const presetText: Record<Preset, string> = {
-  essential: 'Soundbar, built-in microphones, one PTZ camera',
-  standard: 'Wall speakers, ceiling microphones, two PTZ cameras, touch panel',
-  premium: 'Two displays, ceiling audio, three PTZ cameras, touch panel',
-};
-
 // A plan can arrive in the address (#p=...), for example from a shared link. This component only runs in the browser.
 function planFromAddress(): Plan {
   if (typeof window === 'undefined') return defaultPlan;
@@ -181,7 +179,7 @@ export default function RoomPlanner() {
   const [plan, setPlan] = useState<Plan>(planFromAddress);
   const [step, setStep] = useState(0);
   const [view, setView] = useState<ViewState>({ name: 'iso', nonce: 0 });
-  const [flow, setFlow] = useState(false);
+  const [sheet, setSheet] = useState<'flow' | 'plans' | null>(null);
   const [copied, setCopied] = useState<'done' | 'failed' | null>(null);
   const capture = useRef<Capture | null>(null);
 
@@ -218,7 +216,7 @@ export default function RoomPlanner() {
     capture.current = fn;
   }, []);
   const show = (name: ViewName) => {
-    setFlow(false);
+    setSheet(null);
     setView((v) => ({ name, nonce: v.nonce + 1 }));
   };
 
@@ -248,7 +246,7 @@ export default function RoomPlanner() {
     setTimeout(() => setCopied(null), 3000);
   };
 
-  const tableDim = tableSize(plan.shape, plan.seats, layout.endChairs);
+  const tableDim = tableSize(plan.shape, plan.seats, layout.endChairs, plan.roomType === 'huddle');
 
   return (
     <section className="planner" aria-label="Room planner">
@@ -273,13 +271,20 @@ export default function RoomPlanner() {
           {step === 0 && (
             <>
               <h2>Your room</h2>
+              <Seg
+                label="Kind of room"
+                value={plan.roomType}
+                options={(Object.keys(roomTypes) as RoomType[]).map((t) => ({ value: t, label: roomTypes[t].label }))}
+                onChange={(t) => setPlan((cur) => applyRoomType(cur, t))}
+              />
+              <p className="planner-hint">{roomTypes[plan.roomType].about}</p>
               <div className="planner-field">
                 <span className="planner-label">Start from a package</span>
                 <div className="planner-presets">
                   {(['essential', 'standard', 'premium'] as const).map((p) => (
                     <button key={p} type="button" onClick={() => setPlan((cur) => applyPreset(cur, p))}>
                       <strong>{p[0].toUpperCase() + p.slice(1)}</strong>
-                      <small>{presetText[p]}</small>
+                      <small>{presetText[plan.roomType][p]}</small>
                     </button>
                   ))}
                 </div>
@@ -298,50 +303,64 @@ export default function RoomPlanner() {
               <Length label="Ceiling height" metres={plan.height} unit={u} onChange={(m) => set('height', m)} />
               <Check label="Show the ceiling" checked={plan.ceiling} onChange={(v) => set('ceiling', v)} />
               <p className="planner-hint">
-                Up to {limits.length[1]} m ({Math.round(limits.length[1] * 3.28)} ft). The display is on the wall at the
-                far end.
+                Up to {limitsFor(plan.roomType).length[1]} m ({Math.round(limitsFor(plan.roomType).length[1] * 3.28)}{' '}
+                ft) for this kind of room. The display is on the wall at the far end.
               </p>
             </>
           )}
 
           {step === 1 && (
             <>
-              <h2>Table and seats</h2>
-              <Seg
-                label="Table shape"
-                value={plan.shape}
-                options={[
-                  { value: 'rect', label: 'Rectangular' },
-                  { value: 'round', label: 'Round' },
-                ]}
-                onChange={(v) => set('shape', v)}
-              />
+              <h2>{plan.roomType === 'training' ? 'Desks and seats' : 'Table and seats'}</h2>
+              {plan.roomType !== 'training' && (
+                <Seg
+                  label="Table shape"
+                  value={plan.shape}
+                  options={[
+                    { value: 'rect', label: 'Rectangular' },
+                    { value: 'round', label: 'Round' },
+                  ]}
+                  onChange={(v) => set('shape', v)}
+                />
+              )}
               <Count
                 label="Seats"
                 value={plan.seats}
-                min={plan.shape === 'round' ? 3 : limits.seats[0]}
-                max={plan.shape === 'round' ? 14 : limits.seats[1]}
+                min={
+                  plan.shape === 'round'
+                    ? Math.max(3, limitsFor(plan.roomType).seats[0])
+                    : limitsFor(plan.roomType).seats[0]
+                }
+                max={
+                  plan.shape === 'round'
+                    ? Math.min(14, limitsFor(plan.roomType).seats[1])
+                    : limitsFor(plan.roomType).seats[1]
+                }
                 onChange={(n) => set('seats', n)}
               />
-              <Seg
-                label="Table position"
-                value={plan.position}
-                options={[
-                  { value: 'center', label: 'Centered' },
-                  { value: 'back', label: 'Towards the back' },
-                  { value: 'front', label: 'Towards the display' },
-                ]}
-                onChange={(v) => set('position', v)}
-              />
-              {plan.shape === 'rect' && (
+              {plan.roomType !== 'training' && (
+                <Seg
+                  label="Table position"
+                  value={plan.position}
+                  options={[
+                    { value: 'center', label: 'Centered' },
+                    { value: 'back', label: 'Towards the back' },
+                    { value: 'front', label: 'Towards the display' },
+                  ]}
+                  onChange={(v) => set('position', v)}
+                />
+              )}
+              {plan.roomType === 'conference' && plan.shape === 'rect' && (
                 <Check
                   label="Chairs at the ends of the table"
                   checked={plan.endChairs}
                   onChange={(v) => set('endChairs', v)}
                 />
               )}
-              <Check label="Show a presenter" checked={plan.presenter} onChange={(v) => set('presenter', v)} />
-              {plan.presenter && (
+              {plan.roomType !== 'huddle' && (
+                <Check label="Show a presenter" checked={plan.presenter} onChange={(v) => set('presenter', v)} />
+              )}
+              {plan.presenter && plan.roomType !== 'huddle' && (
                 <p className="planner-hint">
                   Drag the presenter in the 3D view to move them.{' '}
                   {(plan.presenterX !== null || plan.presenterZ !== null) && (
@@ -356,23 +375,26 @@ export default function RoomPlanner() {
                 </p>
               )}
               <p className="planner-hint">
-                The table is sized for you: {formatLength(tableDim.length, u)} × {formatLength(tableDim.width, u)}.
+                {layout.rows
+                  ? `${layout.rows.count} row${layout.rows.count > 1 ? 's' : ''} of up to ${layout.rows.perRow} seats at two-seat desks, ${formatLength(layout.tables[0].width, u)} Ã— ${formatLength(layout.tables[0].length, u)} each.`
+                  : `The table is sized for you: ${formatLength(tableDim.length, u)} Ã— ${formatLength(tableDim.width, u)}.`}
               </p>
             </>
           )}
-
           {step === 2 && (
             <>
               <h2>Display</h2>
-              <Seg
-                label="Number of displays"
-                value={plan.displays}
-                options={[
-                  { value: 1, label: 'One' },
-                  { value: 2, label: 'Two' },
-                ]}
-                onChange={(v) => set('displays', v)}
-              />
+              {plan.roomType !== 'huddle' && (
+                <Seg
+                  label="Number of displays"
+                  value={plan.displays}
+                  options={[
+                    { value: 1, label: 'One' },
+                    { value: 2, label: 'Two' },
+                  ]}
+                  onChange={(v) => set('displays', v)}
+                />
+              )}
               <div className="planner-field">
                 <label htmlFor="planner-size">Display size</label>
                 <select
@@ -442,7 +464,7 @@ export default function RoomPlanner() {
                 options={[
                   { value: 'none', label: 'None' },
                   { value: 'integrated', label: 'Built-in' },
-                  { value: 'table', label: 'Table' },
+                  ...(plan.roomType === 'training' ? [] : [{ value: 'table' as const, label: 'Table' }]),
                   { value: 'ceiling', label: 'Ceiling' },
                 ]}
                 onChange={(v) => set('mics', v)}
@@ -483,7 +505,7 @@ export default function RoomPlanner() {
                   { value: 'none', label: 'None' },
                   { value: 'one', label: 'One' },
                   { value: 'two', label: 'Two' },
-                  { value: 'three', label: 'Three' },
+                  ...(plan.roomType === 'huddle' ? [] : [{ value: 'three' as const, label: 'Three' }]),
                 ]}
                 onChange={(v) => set('cameras', v)}
               />
@@ -521,18 +543,20 @@ export default function RoomPlanner() {
           {step === 5 && (
             <>
               <h2>Control and platform</h2>
-              <Check
-                label="Connection panels in the table"
-                checked={plan.tablePanels}
-                onChange={(v) => set('tablePanels', v)}
-                hint="Power and cables for laptops"
-              />
+              {plan.roomType !== 'training' && (
+                <Check
+                  label="Connection panels in the table"
+                  checked={plan.tablePanels}
+                  onChange={(v) => set('tablePanels', v)}
+                  hint="Power and cables for laptops"
+                />
+              )}
               <Seg
                 label="Touch panel"
                 value={plan.control}
                 options={[
                   { value: 'none', label: 'None' },
-                  { value: 'table', label: 'On the table' },
+                  ...(plan.roomType === 'training' ? [] : [{ value: 'table' as const, label: 'On the table' }]),
                   { value: 'wall', label: 'On the wall' },
                 ]}
                 onChange={(v) => set('control', v)}
@@ -557,7 +581,11 @@ export default function RoomPlanner() {
               <h2>Your plan</h2>
               <p className="planner-hint">
                 {formatLength(plan.length, u)} × {formatLength(plan.width, u)}, ceiling {formatLength(plan.height, u)}.{' '}
-                {plan.seats} seats at a {plan.shape === 'round' ? 'round' : 'rectangular'} table.
+                {roomTypes[plan.roomType].label} room, {plan.seats} seats{' '}
+                {plan.roomType === 'training'
+                  ? 'in rows of desks'
+                  : `at a ${plan.shape === 'round' ? 'round' : 'rectangular'} table`}
+                .
               </p>
               <ul className="planner-items">
                 {items.map((i) => (
@@ -649,13 +677,29 @@ export default function RoomPlanner() {
           <button type="button" onClick={() => show('side')}>
             Side
           </button>
-          <button type="button" aria-pressed={flow} onClick={() => setFlow((f) => !f)}>
+          <button
+            type="button"
+            aria-pressed={sheet === 'flow'}
+            onClick={() => setSheet((s) => (s === 'flow' ? null : 'flow'))}
+          >
             Flow
           </button>
+          <button
+            type="button"
+            aria-pressed={sheet === 'plans'}
+            onClick={() => setSheet((s) => (s === 'plans' ? null : 'plans'))}
+          >
+            Plans
+          </button>
         </div>
-        {flow && (
+        {sheet === 'flow' && (
           <div className="planner-flow-sheet">
             <SignalFlow plan={plan} analysis={analysis} />
+          </div>
+        )}
+        {sheet === 'plans' && (
+          <div className="planner-plans-sheet">
+            <PlanDrawings plan={plan} analysis={analysis} />
           </div>
         )}
         <p className="planner-disclaimer">Indicative sketch. Check dimensions on site.</p>

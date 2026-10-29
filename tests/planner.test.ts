@@ -3,16 +3,19 @@ import assert from 'node:assert/strict';
 import {
   analyze,
   applyPreset,
+  applyRoomType,
   computeLayout,
   decodePlan,
   defaultPlan,
   encodePlan,
+  keepClear,
   normalizePlan,
   planSummary,
-  keepClear,
   presenterSpot,
+  presetText,
   rules,
   tableSize,
+  templates,
 } from '../lib/planner/model.ts';
 import { signalFlow } from '../lib/planner/flow.ts';
 
@@ -293,4 +296,116 @@ test('the signal flow describes the chosen room', () => {
   assert.ok(title('mics')?.includes('microphone array'));
   assert.ok(links.some((l) => l.from === 'mics' && l.to === 'processor'));
   assert.ok(links.some((l) => l.from === 'cameras' && l.to === 'switch'));
+});
+
+test('each kind of room keeps to its own size and seat limits', () => {
+  const huddle = normalizePlan({ roomType: 'huddle', length: 12, width: 12, seats: 20 });
+  assert.equal(huddle.length, 5.5);
+  assert.equal(huddle.width, 5.5);
+  assert.equal(huddle.seats, 6);
+  const training = normalizePlan({ roomType: 'training', length: 1, width: 1, seats: 99, shape: 'round' });
+  assert.equal(training.length, 4);
+  assert.equal(training.seats, 40);
+  assert.equal(training.shape, 'rect', 'classrooms have desks, not round tables');
+  assert.equal(normalizePlan({ roomType: 'nonsense' }).roomType, 'conference');
+  assert.equal(normalizePlan({ roomType: 'huddle', displays: 2, cameras: 'three', presenter: true }).displays, 1);
+  assert.equal(normalizePlan({ roomType: 'huddle', cameras: 'three' }).cameras, 'two');
+  assert.equal(normalizePlan({ roomType: 'huddle', presenter: true }).presenter, false);
+  const room = normalizePlan({ roomType: 'training', tablePanels: true, control: 'table', mics: 'table' });
+  assert.equal(room.tablePanels, false);
+  assert.equal(room.control, 'wall');
+  assert.equal(room.mics, 'ceiling');
+});
+
+test('a huddle table fits a small room that a conference table would not', () => {
+  const huddle = plan({ roomType: 'huddle', length: 3.5, width: 3, seats: 4 });
+  assert.equal(computeLayout(huddle).fits, true);
+  assert.equal(computeLayout(huddle).seats.length, 4);
+  const crowded = plan({ roomType: 'conference', length: 3.5, width: 3, seats: 4 });
+  assert.equal(computeLayout(crowded).fits, false);
+});
+
+test('a classroom puts every seat at a desk, in rows facing the display', () => {
+  for (const seats of [4, 5, 9, 16, 24, 31, 40]) {
+    for (const width of [5, 8, 12]) {
+      const p = plan({ roomType: 'training', length: 12, width, seats });
+      const layout = computeLayout(p);
+      assert.equal(layout.seats.length, seats, `${seats} seats in ${width} m`);
+      assert.equal(layout.tables.length, layout.rows?.desks);
+      assert.ok(layout.tables.length >= Math.ceil(seats / 2));
+      for (const s of layout.seats) {
+        assert.equal(s.rot, Math.PI, 'faces the display');
+        assert.ok(
+          layout.tables.some((t) => Math.abs(s.x - t.x) <= t.width / 2 && s.z > t.z),
+          'sits behind a desk',
+        );
+      }
+      for (const t of layout.tables) assert.ok(t.z - t.length / 2 >= -6 + 2.2 - 1e-9, 'the front row is clear');
+    }
+  }
+  const room = computeLayout(plan({ roomType: 'training', length: 10, width: 8, seats: 24 }));
+  assert.equal(room.fits, true);
+  assert.equal(room.rows?.count, 4);
+  assert.equal(computeLayout(plan({ roomType: 'training', length: 4, width: 4, seats: 40 })).fits, false);
+});
+
+test('a classroom block stands in for the table everywhere else', () => {
+  const p = plan({ roomType: 'training', length: 10, width: 8, seats: 24, speakers: 'ceiling', mics: 'ceiling' });
+  const a = analyze(p);
+  const t = a.layout.table;
+  for (const d of a.layout.tables) {
+    assert.ok(Math.abs(d.x) + d.width / 2 <= t.width / 2 + 1e-9);
+    assert.ok(d.z - d.length / 2 >= t.z - t.length / 2 - 1e-9 && d.z + d.length / 2 <= t.z + t.length / 2 + 1e-9);
+  }
+  assert.ok(a.gear.mics.length >= 1 && a.gear.speakers.length >= 2);
+  const spot = presenterSpot({ ...p, presenterX: 0, presenterZ: t.z }, a.displays);
+  assert.ok(
+    Math.abs(spot.x) > t.width / 2 || spot.z < t.z - t.length / 2 || spot.z > t.z + t.length / 2,
+    'off the desks',
+  );
+});
+
+test('choosing a kind of room applies its template and keeps what is personal', () => {
+  const mine = plan({ unit: 'ft', system: 'zoom', ceiling: false });
+  for (const type of ['huddle', 'conference', 'training'] as const) {
+    const next = applyRoomType(mine, type);
+    assert.equal(next.roomType, type);
+    assert.equal(next.unit, 'ft');
+    assert.equal(next.system, 'zoom');
+    assert.equal(next.ceiling, false);
+    assert.equal(next.length, templates[type].length);
+    assert.equal(next.seats, templates[type].seats);
+    assert.equal(next.presenterX, null);
+    assert.equal(computeLayout(next).fits, true, `${type} template fits its room`);
+    assert.equal(analyze(next).warnings.filter((w) => w.includes('do not fit')).length, 0);
+  }
+});
+
+test('every package suits every kind of room', () => {
+  for (const type of ['huddle', 'conference', 'training'] as const) {
+    const base = applyRoomType(plan(), type);
+    for (const preset of ['essential', 'standard', 'premium'] as const) {
+      const p = applyPreset(base, preset);
+      assert.equal(p.roomType, type);
+      assert.equal(typeof presetText[type][preset], 'string');
+      const a = analyze(p);
+      assert.ok(a.items.length >= 4, `${type} ${preset}`);
+      assert.ok(a.gear.cameras.length >= 1, `${type} ${preset} has a camera`);
+      assert.ok(!a.warnings.some((w) => w.includes('do not fit')), `${type} ${preset} fits`);
+    }
+    assert.ok(
+      analyze(applyPreset(base, 'premium')).items.length >= analyze(applyPreset(base, 'essential')).items.length,
+    );
+  }
+});
+
+test('the room type travels in the link, and old links without it are conference rooms', () => {
+  const huddle = applyRoomType(plan(), 'huddle');
+  assert.deepEqual(decodePlan(encodePlan(huddle)), huddle);
+  const training = applyRoomType(plan(), 'training');
+  assert.deepEqual(decodePlan(encodePlan(training)), training);
+  const old = JSON.parse(atob(encodePlan(plan()).replace(/-/g, '+').replace(/_/g, '/') + '=='));
+  assert.equal(decodePlan(btoa(JSON.stringify(old.slice(0, 23)))?.replace(/=+$/, '') ?? '')?.roomType, 'conference');
+  assert.ok(planSummary(training, 'x').includes('Training room'));
+  assert.ok(planSummary(huddle, 'x').includes('Huddle room'));
 });
