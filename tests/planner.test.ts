@@ -9,10 +9,12 @@ import {
   encodePlan,
   normalizePlan,
   planSummary,
+  keepClear,
   presenterSpot,
   rules,
   tableSize,
 } from '../lib/planner/model.ts';
+import { signalFlow } from '../lib/planner/flow.ts';
 
 const plan = (over: Record<string, unknown> = {}) => normalizePlan({ ...defaultPlan, ...over });
 
@@ -167,23 +169,23 @@ test('two cameras flank the display; a third at the back follows the presenter',
   assert.equal(two.length, 2);
   assert.equal(two[0].pos[0], -two[1].pos[0]);
   assert.ok(Math.abs(two[1].pos[0]) > twoPlan.displays.width / 2);
-  const here = plan({ cameras: 'three', presenter: true, presenterX: -1, presenterZ: -2 });
-  const moved = plan({ cameras: 'three', presenter: true, presenterX: 1.5, presenterZ: 0 });
+  const here = plan({ cameras: 'three', presenter: true, presenterX: -2, presenterZ: -3.2 });
+  const moved = plan({ cameras: 'three', presenter: true, presenterX: 2.2, presenterZ: -3.2 });
   const rearA = analyze(here).gear.cameras[2];
   const rearB = analyze(moved).gear.cameras[2];
   assert.equal(analyze(here).gear.cameras.length, 3);
   assert.ok(rearA.pos[2] > 0, 'on the back wall');
-  assert.equal(rearA.target[0], -1);
-  assert.equal(rearA.target[2], -2);
-  assert.equal(rearB.target[0], 1.5);
+  assert.equal(rearA.target[0], -2);
+  assert.equal(rearA.target[2], -3.2);
+  assert.equal(rearB.target[0], 2.2);
   assert.ok(rearA.hfov < two[0].hfov, 'zoomed in on the presenter');
 });
 
 test('the presenter can be moved but not through walls or into the display wall', () => {
   const beside = presenterSpot(plan(), analyze(plan()).displays);
   assert.ok(beside.x < 0 && beside.z < -2);
-  const moved = plan({ presenter: true, presenterX: 1.2, presenterZ: 0.5 });
-  assert.deepEqual(presenterSpot(moved, analyze(moved).displays), { x: 1.2, z: 0.5 });
+  const moved = plan({ presenter: true, presenterX: 2.2, presenterZ: 0.5 });
+  assert.deepEqual(presenterSpot(moved, analyze(moved).displays), { x: 2.2, z: 0.5 });
   const wild = plan({ presenterX: 99, presenterZ: -99 });
   assert.equal(wild.presenterX, 2.7);
   assert.equal(wild.presenterZ, -3.6);
@@ -221,4 +223,74 @@ test('no ceiling speaker hangs where the microphone array is', () => {
 
 test('old links with four cameras open with three', () => {
   assert.equal(normalizePlan({ cameras: 'four' }).cameras, 'three');
+});
+
+test('a presenter dropped on the table or the chairs is moved to the nearest free floor', () => {
+  for (const shape of ['rect', 'round']) {
+    for (const endChairs of [false, true]) {
+      const p = plan({ shape, endChairs, seats: 8 });
+      const layout = computeLayout(p);
+      const t = layout.table;
+      const spot = keepClear(p, layout, t.x, t.z);
+      const reach = 0.42 + 0.33;
+      if (shape === 'rect') {
+        const outsideX = Math.abs(spot.x - t.x) >= t.width / 2 + reach - 0.011;
+        const outsideZ = Math.abs(spot.z - t.z) >= t.length / 2 + (endChairs ? reach : 0.35) - 0.011;
+        assert.ok(outsideX || outsideZ, `${shape} ${endChairs}`);
+      } else {
+        assert.ok(Math.hypot(spot.x - t.x, spot.z - t.z) >= t.width / 2 + reach - 0.011);
+      }
+    }
+  }
+  const p = plan();
+  assert.deepEqual(keepClear(p, computeLayout(p), -2.5, -3.2), { x: -2.5, z: -3.2 });
+  const dropped = plan({ presenter: true, presenterX: 0, presenterZ: -1.1 });
+  const spot = presenterSpot(dropped, analyze(dropped).displays);
+  assert.notDeepEqual(spot, { x: 0, z: -1.1 });
+  assert.deepEqual(keepClear(dropped, computeLayout(dropped), spot.x, spot.z), spot, 'a free spot stays where it is');
+});
+
+test('the signal flow connects every device, always from left to right', () => {
+  for (const cameras of ['none', 'one', 'two', 'three']) {
+    for (const speakers of ['none', 'soundbar', 'front', 'ceiling']) {
+      for (const mics of ['none', 'integrated', 'table', 'ceiling']) {
+        for (const tablePanels of [true, false]) {
+          for (const control of ['none', 'table', 'wall']) {
+            const p = plan({ cameras, speakers, mics, tablePanels, control });
+            const { nodes, links } = signalFlow(p, analyze(p));
+            const label = JSON.stringify({ cameras, speakers, mics, tablePanels, control });
+            const column = new Map(nodes.map((n) => [n.id, n.column]));
+            assert.equal(column.size, nodes.length, `unique ids ${label}`);
+            for (const l of links) {
+              assert.ok(column.has(l.from) && column.has(l.to), `known ends ${label}`);
+              assert.ok(
+                (column.get(l.from) ?? 9) < (column.get(l.to) ?? 0),
+                `left to right ${label} ${l.from}-${l.to}`,
+              );
+            }
+            for (const n of nodes) {
+              const linked = links.some((l) => l.from === n.id || l.to === n.id);
+              const quiet = n.id === 'system' || n.id === 'displays';
+              assert.ok(linked || quiet, `${n.id} is connected ${label}`);
+            }
+            assert.ok(
+              links.some((l) => l.from === 'system' && l.to === 'displays'),
+              `display is fed ${label}`,
+            );
+          }
+        }
+      }
+    }
+  }
+});
+
+test('the signal flow describes the chosen room', () => {
+  const p = plan({ cameras: 'three', speakers: 'ceiling', mics: 'ceiling', micShape: 'round', system: 'zoom' });
+  const { nodes, links } = signalFlow(p, analyze(p));
+  const title = (id: string) => nodes.find((n) => n.id === id)?.title;
+  assert.equal(title('cameras'), '3× PTZ cameras');
+  assert.equal(title('system'), 'Zoom Rooms system');
+  assert.ok(title('mics')?.includes('microphone array'));
+  assert.ok(links.some((l) => l.from === 'mics' && l.to === 'processor'));
+  assert.ok(links.some((l) => l.from === 'cameras' && l.to === 'switch'));
 });

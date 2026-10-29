@@ -199,19 +199,22 @@ function Room({ plan }: { plan: Plan }) {
         <planeGeometry args={[L, H]} />
         <meshStandardMaterial color="#c4c9cf" side={DoubleSide} />
       </mesh>
-      {plan.ceiling && <Ceiling width={W} length={L} height={H} />}
+      {/* the two walls that would hide the room are only outlined */}
+      <Outline size={[W, H]} position={[0, H / 2, L / 2]} rotation={[0, 0, 0]} />
+      <Outline size={[L, H]} position={[W / 2, H / 2, 0]} rotation={[0, Math.PI / 2, 0]} />
+      {plan.ceiling && <Outline size={[W, L]} position={[0, H, 0]} rotation={[Math.PI / 2, 0, 0]} />}
     </group>
   );
 }
 
-// The ceiling is drawn as an outline with a very faint fill, so the room stays readable from above.
-function Ceiling({ width, length, height }: { width: number; length: number; height: number }) {
-  const edges = useMemo(() => new EdgesGeometry(new PlaneGeometry(width, length)), [width, length]);
+// A plane drawn as an outline with a very faint fill, so the room stays readable from every side.
+function Outline({ size, position, rotation }: { size: [number, number]; position: Vec3; rotation: Vec3 }) {
+  const edges = useMemo(() => new EdgesGeometry(new PlaneGeometry(size[0], size[1])), [size]);
   useEffect(() => () => edges.dispose(), [edges]);
   return (
-    <group position={[0, height, 0]} rotation={[Math.PI / 2, 0, 0]}>
+    <group position={position} rotation={rotation}>
       <mesh>
-        <planeGeometry args={[width, length]} />
+        <planeGeometry args={size} />
         <meshBasicMaterial color="#e9eef3" transparent opacity={0.04} side={DoubleSide} depthWrite={false} />
       </mesh>
       <lineSegments geometry={edges}>
@@ -220,7 +223,6 @@ function Ceiling({ width, length, height }: { width: number; length: number; hei
     </group>
   );
 }
-
 function Chair({ x, z, rot }: { x: number; z: number; rot: number }) {
   return (
     <group position={[x, 0, z]} rotation={[0, rot, 0]}>

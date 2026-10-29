@@ -133,14 +133,49 @@ export const presenterRange = (width: number, length: number) => ({
   z: [-length / 2 + 0.4, length / 2 - 0.3] as const,
 });
 
+// A standing presenter cannot be on the table or in the chairs around it: this pushes them to the nearest free floor.
+export function keepClear(plan: Plan, layout: Layout, x: number, z: number) {
+  const range = presenterRange(plan.width, plan.length);
+  const px = clamp(x, ...range.x);
+  const pz = clamp(z, ...range.z);
+  const t = layout.table;
+  const reach = rules.chairOffset + 0.33; // table edge to the back of a chair
+  const free = (a: number, b: number) => a >= range.x[0] && a <= range.x[1] && b >= range.z[0] && b <= range.z[1];
+  let options: [number, number][];
+  if (t.shape === 'round') {
+    const r = t.width / 2 + reach;
+    const d = Math.hypot(px - t.x, pz - t.z);
+    if (d >= r) return { x: round2(px), z: round2(pz) };
+    const ux = d === 0 ? 0 : (px - t.x) / d;
+    const uz = d === 0 ? -1 : (pz - t.z) / d;
+    options = [[t.x + ux * r, t.z + uz * r]];
+  } else {
+    const hx = t.width / 2 + reach;
+    const hz = t.length / 2 + (layout.endChairs ? reach : 0.35);
+    if (Math.abs(px - t.x) >= hx || Math.abs(pz - t.z) >= hz) return { x: round2(px), z: round2(pz) };
+    options = [
+      [t.x - hx, pz],
+      [t.x + hx, pz],
+      [px, t.z - hz],
+      [px, t.z + hz],
+    ];
+  }
+  const best = options
+    .filter(([a, b]) => free(a, b))
+    .sort((m, n) => Math.hypot(m[0] - px, m[1] - pz) - Math.hypot(n[0] - px, n[1] - pz))[0];
+  return best ? { x: round2(best[0]), z: round2(best[1]) } : { x: round2(px), z: round2(pz) };
+}
+
 // Where the presenter stands: the dragged spot, or beside the display until they are moved.
 export function presenterSpot(plan: Plan, displays: { count: 1 | 2; width: number }) {
   const range = presenterRange(plan.width, plan.length);
   const beside = displays.count === 2 ? -(displays.width + 0.4) : -(displays.width / 2 + 0.7);
-  return {
-    x: plan.presenterX ?? clamp(beside, ...range.x),
-    z: plan.presenterZ ?? range.z[0] + 0.6,
-  };
+  return keepClear(
+    plan,
+    computeLayout(plan),
+    plan.presenterX ?? clamp(beside, ...range.x),
+    plan.presenterZ ?? range.z[0] + 0.6,
+  );
 }
 
 // Clamps and repairs a plan, so anything that arrives from the address bar is safe to use.
@@ -422,7 +457,7 @@ export function computeEquipment(plan: Plan, layout: Layout, d: DisplayInfo): Eq
 // ---------------------------------------------------------------- the equipment list and warnings
 
 export type Item = { name: string; qty: number; note?: string };
-const systemName: Record<RoomSystem, string> = {
+export const systemName: Record<RoomSystem, string> = {
   byod: 'BYOD gateway (cable or wireless sharing)',
   teams: 'Microsoft Teams Rooms system',
   zoom: 'Zoom Rooms system',

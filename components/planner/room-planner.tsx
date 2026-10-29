@@ -3,11 +3,13 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   analyze,
   applyPreset,
+  computeLayout,
   decodePlan,
   defaultPlan,
   encodePlan,
   formatLength,
   fromUnit,
+  keepClear,
   limits,
   normalizePlan,
   planSummary,
@@ -18,6 +20,7 @@ import {
   type Preset,
 } from '@/lib/planner/model';
 import PlannerScene, { type Capture, type ViewName, type ViewState } from './scene';
+import SignalFlow from './signal-flow';
 
 const steps = ['Room', 'Layout', 'Display', 'Audio', 'Video', 'Control', 'Summary'] as const;
 
@@ -178,6 +181,7 @@ export default function RoomPlanner() {
   const [plan, setPlan] = useState<Plan>(planFromAddress);
   const [step, setStep] = useState(0);
   const [view, setView] = useState<ViewState>({ name: 'iso', nonce: 0 });
+  const [flow, setFlow] = useState(false);
   const [copied, setCopied] = useState<'done' | 'failed' | null>(null);
   const capture = useRef<Capture | null>(null);
 
@@ -203,13 +207,20 @@ export default function RoomPlanner() {
     [plan, step],
   );
   const movePresenter = useCallback(
-    (x: number, z: number) => setPlan((p) => normalizePlan({ ...p, presenterX: x, presenterZ: z })),
+    (x: number, z: number) =>
+      setPlan((p) => {
+        const spot = keepClear(p, computeLayout(p), x, z);
+        return normalizePlan({ ...p, presenterX: spot.x, presenterZ: spot.z });
+      }),
     [],
   );
   const onReady = useCallback((fn: Capture) => {
     capture.current = fn;
   }, []);
-  const show = (name: ViewName) => setView((v) => ({ name, nonce: v.nonce + 1 }));
+  const show = (name: ViewName) => {
+    setFlow(false);
+    setView((v) => ({ name, nonce: v.nonce + 1 }));
+  };
 
   const u = plan.unit;
   const { layout, displays, gear, items, warnings } = analysis;
@@ -638,7 +649,15 @@ export default function RoomPlanner() {
           <button type="button" onClick={() => show('side')}>
             Side
           </button>
+          <button type="button" aria-pressed={flow} onClick={() => setFlow((f) => !f)}>
+            Flow
+          </button>
         </div>
+        {flow && (
+          <div className="planner-flow-sheet">
+            <SignalFlow plan={plan} analysis={analysis} />
+          </div>
+        )}
         <p className="planner-disclaimer">Indicative sketch. Check dimensions on site.</p>
       </div>
     </section>
