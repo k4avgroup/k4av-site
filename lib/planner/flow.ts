@@ -241,7 +241,8 @@ export function signalFlow(plan: Plan, a: Analysis): Flow {
     ['amp', 'mains'],
     ['displays', 'mains'],
   ] as const) {
-    link('pdu', id, label, 'power');
+    // only the first run says "mains", so the labels do not pile up
+    link('pdu', id, links.some((l) => l.from === 'pdu') ? '' : label, 'power');
   }
   return { nodes, links };
 }

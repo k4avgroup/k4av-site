@@ -971,6 +971,17 @@ export default function RoomPlanner() {
             <PlanDrawings plan={plan} analysis={analysis} />
           </div>
         )}
+        {sheet === null && gear.cables.length > 0 && (
+          <ul className="planner-cable-key" aria-label="Cables in the room">
+            {[...new Map(gear.cables.map((c) => [c.label, c.kind])).entries()].map(([label, kind]) => (
+              <li key={label}>
+                <span className="planner-cable-dash" data-kind={kind} />
+                {label}
+              </li>
+            ))}
+            <li className="planner-cable-note">dashed: under the floor, up the wall</li>
+          </ul>
+        )}
         <p className="planner-disclaimer">Indicative sketch. Check dimensions on site.</p>
       </div>
     </section>

@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { buildDrawings, type DrawingId } from '@/lib/planner/drawings';
+import { buildAllDrawings, type DrawingId } from '@/lib/planner/drawings';
 import type { Analysis, Plan } from '@/lib/planner/model';
 import { buildSheet } from '@/lib/planner/sheet';
 import { drawingStyles, Shape } from './drawing-shapes';
@@ -24,6 +24,8 @@ const fileNames: Record<DrawingId, string> = {
   ceiling: 'k4av-ceiling-plan.svg',
   front: 'k4av-display-wall.svg',
   side: 'k4av-section.svg',
+  cabling: 'k4av-cabling-plan.svg',
+  rack: 'k4av-rack-elevation.svg',
 };
 
 // Floor plan, ceiling plan, display wall and section, with dimensions, and the same four on one printable sheet.
@@ -32,7 +34,11 @@ export default function PlanDrawings({ plan, analysis }: { plan: Plan; analysis:
   const [today] = useState(() => new Date().toISOString().slice(0, 10));
   const svg = useRef<SVGSVGElement | null>(null);
   const sheetSvg = useRef<SVGSVGElement | null>(null);
-  const drawings = useMemo(() => buildDrawings(plan, analysis), [plan, analysis]);
+  // the rack elevation is there only when the plan has a rack or an equipment box
+  const drawings = useMemo(
+    () => buildAllDrawings(plan, analysis).filter((d) => d.id !== 'rack' || analysis.gear.rack),
+    [plan, analysis],
+  );
   const sheet = useMemo(() => buildSheet(plan, analysis, today), [plan, analysis, today]);
   const drawing = drawings.find((d) => d.id === id) ?? drawings[0];
 

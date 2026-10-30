@@ -1,9 +1,18 @@
-import { formatLength, presenterSpot, roomTypes, rules, type Analysis, type Plan } from './model.ts';
+import {
+  formatLength,
+  presenterSpot,
+  roomTypes,
+  rules,
+  type Analysis,
+  type Cable,
+  type Plan,
+  type Vec3,
+} from './model.ts';
 
 // Drawings of the planned room, as shapes in pixels: a floor plan, a ceiling plan, the display wall and a section.
 // Shapes carry a style name; the page decides how each style looks. Dimension lines show the real lengths.
 
-export type DrawingId = 'floor' | 'ceiling' | 'front' | 'side';
+export type DrawingId = 'floor' | 'ceiling' | 'front' | 'side' | 'cabling' | 'rack';
 export type Style =
   | 'wall'
   | 'floor'
@@ -20,7 +29,21 @@ export type Style =
   | 'grid'
   | 'dim'
   | 'ext'
-  | 'person';
+  | 'person'
+  | 'cable-video'
+  | 'cable-audio'
+  | 'cable-control'
+  | 'cable-net'
+  | 'rack'
+  | 'rackfree'
+  | 'rack-control'
+  | 'rack-video'
+  | 'rack-audio'
+  | 'rack-network'
+  | 'rack-compute'
+  | 'rack-laptop'
+  | 'rack-power'
+  | 'rack-blank';
 export type TextStyle = 'label' | 'small' | 'dim' | 'title' | 'ondark';
 export type Prim =
   | { k: 'rect'; x: number; y: number; w: number; h: number; s: Style; r?: number }
@@ -42,6 +65,8 @@ export const drawingTitles: Record<DrawingId, string> = {
   ceiling: 'Ceiling plan',
   front: 'Display wall',
   side: 'Section',
+  cabling: 'Cabling',
+  rack: 'Rack',
 };
 
 export type DrawingOptions = {
@@ -179,12 +204,14 @@ function wedge(
   g.poly([[X(cam.pos[0]), Y(cam.pos[2])], corner(a - half), corner(a + half)], 'fov');
 }
 
-function planBase(plan: Plan, a: Analysis, ceiling: boolean, opts: DrawingOptions) {
+function planBase(plan: Plan, a: Analysis, kind: 'floor' | 'ceiling' | 'cabling', opts: DrawingOptions) {
   const { length: L, width: W } = plan;
   const { layout, displays, gear } = a;
+  const ceiling = kind === 'ceiling';
   const s = opts.scale ?? fit(W, L);
-  const ox = SIDE.plan.left;
-  const oy = MARGIN.top;
+  const out = rackOutside(plan, a);
+  const ox = SIDE.plan.left + out.left * s;
+  const oy = MARGIN.top + out.top * s;
   const X = (x: number) => ox + (x + W / 2) * s;
   const Y = (z: number) => oy + (z + L / 2) * s;
   const g = sheet();
@@ -231,7 +258,7 @@ function planBase(plan: Plan, a: Analysis, ceiling: boolean, opts: DrawingOption
         t.shape === 'boat' ? (t.width / 2) * s : undefined,
       );
   };
-  if (ceiling) {
+  if (ceiling || kind === 'cabling') {
     for (const t of layout.tables) tableShape(t, 'ref');
   } else {
     for (const t of layout.tables) tableShape(t, 'furniture');
@@ -246,7 +273,7 @@ function planBase(plan: Plan, a: Analysis, ceiling: boolean, opts: DrawingOption
   // two cameras on the same spot of the plan (one above the display, one below) are drawn side by side
   const stacked = new Map<string, number>();
   gear.cameras.forEach((cam, i) => {
-    if (!ceiling) wedge(g, plan, cam, X, Y);
+    if (kind === 'floor') wedge(g, plan, cam, X, Y);
     const key = `${cam.pos[0]},${cam.pos[2]}`;
     const nth = stacked.get(key) ?? 0;
     stacked.set(key, nth + 1);
@@ -261,13 +288,24 @@ function planBase(plan: Plan, a: Analysis, ceiling: boolean, opts: DrawingOption
   if (c && plan.control === 'table' && !ceiling)
     g.rect(X(c[0]) - 0.12 * s, Y(c[2]) - 0.08 * s, 0.24 * s, 0.16 * s, 'control');
 
-  return { g, s, ox, oy, X, Y, width: ox + W * s + SIDE.plan.right, height: oy + L * s + bottomSpace(opts) };
+  return {
+    g,
+    s,
+    ox,
+    oy,
+    X,
+    Y,
+    width: ox + W * s + SIDE.plan.right + out.right * s,
+    height: oy + L * s + bottomSpace(opts) + out.bottom * s,
+    below: out.bottom * s, // room taken by a rack outside, under the plan
+  };
 }
 
 export function floorPlan(plan: Plan, a: Analysis, opts: DrawingOptions = {}): Drawing {
   const { layout, displays, gear } = a;
   const { length: L, unit } = plan;
-  const { g, s, ox, oy, X, Y, width, height } = planBase(plan, a, false, opts);
+  const { g, s, ox, oy, X, Y, width, height, below } = planBase(plan, a, 'floor', opts);
+  equipmentOnPlan(g, plan, a, X, Y, s);
 
   if (gear.bar) g.rect(X(0) - (gear.bar.width * s) / 2, Y(-L / 2) + 8, gear.bar.width * s, 6, 'camera');
   for (const p of gear.wallSpeakers) g.rect(X(p[0]) - 0.08 * s, Y(p[2]) - 0.07 * s, 0.16 * s, 0.14 * s, 'speaker');
@@ -318,10 +356,10 @@ export function floorPlan(plan: Plan, a: Analysis, opts: DrawingOptions = {}): D
   titleBlock(
     g,
     ox,
-    oy + L * s + 50,
+    oy + L * s + below + 50,
     'Floor plan',
     plan,
-    `C camera · P presenter · ■ video bar · ● microphone · farthest seat ${formatLength(displays.farthest, unit)} from the display`,
+    `C camera · P presenter · ■ video bar · ● microphone · AVR rack · WM microphone cabinet · farthest seat ${formatLength(displays.farthest, unit)} from the display`,
     opts.bare,
   );
   return { id: 'floor', title: drawingTitles.floor, width, height, scale: s, prims: g.prims };
@@ -330,8 +368,17 @@ export function floorPlan(plan: Plan, a: Analysis, opts: DrawingOptions = {}): D
 export function ceilingPlan(plan: Plan, a: Analysis, opts: DrawingOptions = {}): Drawing {
   const { gear } = a;
   const { length: L, width: W, unit } = plan;
-  const { g, s, ox, oy, X, Y, width, height } = planBase(plan, a, true, opts);
+  const { g, s, ox, oy, X, Y, width, height, below } = planBase(plan, a, 'ceiling', opts);
   let spacing = '';
+  const rack = gear.rack;
+  const home: [number, number] = rack && rack.mode !== 'behind' ? [rack.pos[0], rack.pos[2]] : [0, -L / 2 + 0.06];
+  if (gear.speakers.length) {
+    // one speaker loop through the ceiling, row by row, ending at the rack
+    const loop = speakerLoop(gear.speakers, home);
+    draw(g, loop, X, Y, 'cable-audio');
+    const end = loop[loop.length - 1];
+    g.text(X(end[0]) + 6, Y(end[1]) - 6, 'TO RACK', 'small', 'start');
+  }
 
   if (gear.speakers.length) {
     const r = Math.max(4, 0.1 * s);
@@ -392,10 +439,10 @@ export function ceilingPlan(plan: Plan, a: Analysis, opts: DrawingOptions = {}):
     }
   }
   const legend =
-    '○ ceiling speaker · □ microphone array · C camera on the wall · PROJ projector · dashed: furniture below · grid: ' +
+    '○ ceiling speaker, green: speaker loop · □ microphone array · C camera · PROJ projector · dashed: furniture below · grid: ' +
     (plan.unit === 'ft' ? '2 × 2 ft tiles' : '600 mm tiles') +
     (spacing ? ` · ${spacing}` : '');
-  titleBlock(g, ox, oy + L * s + 50, 'Ceiling plan', plan, legend, opts.bare);
+  titleBlock(g, ox, oy + L * s + below + 50, 'Ceiling plan', plan, legend, opts.bare);
   return { id: 'ceiling', title: drawingTitles.ceiling, width, height, scale: s, prims: g.prims };
 }
 
@@ -443,6 +490,11 @@ export function displayWall(plan: Plan, a: Analysis, opts: DrawingOptions = {}):
     g.text(X(cam.pos[0]), Y(cam.pos[1]) + (below ? 0.1 * s + 12 : -0.1 * s - 5), `C${i + 1}`, 'small');
   });
   const lowBar = gear.bar !== null && gear.bar.pos[1] < bottom;
+  if (gear.rack?.mode === 'behind') {
+    const box = gear.rack;
+    g.rect(X(-box.width / 2), Y(displays.centerY + box.height / 2), box.width * s, box.height * s, 'rackfree');
+    g.text(X(0), Y(displays.centerY - displays.height / 2) + 14, 'equipment box behind the display', 'small');
+  }
 
   // heights above the floor, stacked on the left; widths along the top
   g.dim(X(-W / 2), Y(H), X(W / 2), Y(H), -26, formatLength(W, unit));
@@ -589,6 +641,242 @@ export function section(plan: Plan, a: Analysis, opts: DrawingOptions = {}): Dra
     scale: s,
     prims: g.prims,
   };
+}
+
+// ---------------------------------------------------------------- cabling and the rack
+
+const runStyle: Record<Cable['kind'], Style> = {
+  laptop: 'cable-video',
+  display: 'cable-video',
+  control: 'cable-control',
+};
+
+// A cable run seen from above: the same line, without its height, and without points that repeat.
+function flatten(points: Vec3[]): [number, number][] {
+  const out: [number, number][] = [];
+  for (const p of points) {
+    const last = out[out.length - 1];
+    if (!last || Math.hypot(last[0] - p[0], last[1] - p[2]) > 0.01) out.push([p[0], p[2]]);
+  }
+  return out;
+}
+
+// The speakers in one run, row by row, left to right and then right to left, ending at the rack ("TO RACK").
+function speakerLoop(speakers: Vec3[], rack: [number, number] | null): [number, number][] {
+  const rows = unique(
+    speakers.map((p) => p[2]),
+    0.2,
+  );
+  const path: [number, number][] = [];
+  rows.forEach((z, i) => {
+    const row = speakers
+      .filter((p) => Math.abs(p[2] - z) < 0.2)
+      .sort((p, q) => (i % 2 === 0 ? p[0] - q[0] : q[0] - p[0]));
+    for (const p of row) path.push([p[0], p[2]]);
+  });
+  if (rack && path.length) {
+    const last = path[path.length - 1];
+    path.push([last[0], rack[1]], rack);
+  }
+  return path;
+}
+
+const draw = (g: Sheet, pts: [number, number][], X: (x: number) => number, Y: (z: number) => number, s: Style) => {
+  for (let i = 1; i < pts.length; i++) g.line(X(pts[i - 1][0]), Y(pts[i - 1][1]), X(pts[i][0]), Y(pts[i][1]), s);
+};
+
+// The footprint of the rack or the cabinet on the plan, whichever way it faces.
+function footprint(rot: number, width: number, depth: number) {
+  const sideways = Math.abs(Math.sin(rot)) > 0.5;
+  return sideways ? { w: depth, h: width } : { w: width, h: depth };
+}
+
+// How far the rack stands outside the room, in metres on each side, so the drawing leaves room for it.
+function rackOutside(plan: Plan, a: Analysis) {
+  const rack = a.gear.rack;
+  const out = { left: 0, right: 0, top: 0, bottom: 0 };
+  if (!rack || !rack.outside) return out;
+  const f = footprint(rack.rot, rack.width, rack.depth);
+  out.left = Math.max(0, -plan.width / 2 - (rack.pos[0] - f.w / 2) + 0.3);
+  out.right = Math.max(0, rack.pos[0] + f.w / 2 - plan.width / 2 + 0.3);
+  out.top = Math.max(0, -plan.length / 2 - (rack.pos[2] - f.h / 2) + 0.3);
+  out.bottom = Math.max(0, rack.pos[2] + f.h / 2 - plan.length / 2 + 0.3);
+  return out;
+}
+
+// What the plans show of the equipment: the rack ("AVR"), outside the room too, and the cabinet for the microphones.
+function equipmentOnPlan(
+  g: Sheet,
+  plan: Plan,
+  a: Analysis,
+  X: (x: number) => number,
+  Y: (z: number) => number,
+  s: number,
+) {
+  const { rack, credenza } = a.gear;
+  if (rack && rack.mode !== 'behind') {
+    const f = footprint(rack.rot, rack.width, rack.depth);
+    const cx = X(rack.pos[0]);
+    const cy = Y(rack.pos[2]);
+    g.rect(cx - (f.w * s) / 2, cy - (f.h * s) / 2, f.w * s, f.h * s, 'rack');
+    g.text(cx, cy + 3.5, 'AVR', 'small');
+    if (rack.outside) g.text(cx, cy - (f.h * s) / 2 - 5, 'AV rack, location TBD', 'small');
+  }
+  if (credenza) {
+    const c = rules.credenza;
+    const f = footprint(credenza.rot, c.width, c.depth);
+    const cx = X(credenza.pos[0]);
+    const cy = Y(credenza.pos[2]);
+    g.rect(cx - (f.w * s) / 2, cy - (f.h * s) / 2, f.w * s, f.h * s, 'device');
+    g.text(cx, cy + 3.5, 'WM', 'small');
+  }
+}
+
+// The cabling plan, "AV infrastructure floor plan": where each cable runs from the devices to the rack or the display.
+export function cablingPlan(plan: Plan, a: Analysis, opts: DrawingOptions = {}): Drawing {
+  const { gear } = a;
+  const { length: L } = plan;
+  const { g, s, ox, oy, X, Y, width, height } = planBase(plan, a, 'cabling', opts);
+  const rack = gear.rack;
+  const home: [number, number] = rack && rack.mode !== 'behind' ? [rack.pos[0], rack.pos[2]] : [0, -L / 2 + 0.06];
+
+  // laptop and control cables, from the table to the equipment, and the feed from the rack to the display
+  for (const c of gear.cables) {
+    const pts = flatten(c.points);
+    draw(g, pts, X, Y, runStyle[c.kind]);
+  }
+  // speakers: one loop through the ceiling, ending at the rack
+  if (gear.speakers.length) {
+    draw(g, speakerLoop(gear.speakers, home), X, Y, 'cable-audio');
+    const r = Math.max(4, 0.09 * s);
+    for (const p of gear.speakers) {
+      g.circle(X(p[0]), Y(p[2]), r, 'speaker');
+      g.text(X(p[0]), Y(p[2]) + 3, 'CS', 'small');
+    }
+  }
+  for (const p of gear.wallSpeakers) {
+    g.rect(X(p[0]) - 0.05 * s, Y(p[2]) - 0.05 * s, 0.1 * s, 0.1 * s, 'speaker');
+    draw(g, [[p[0], p[2]], [p[0], home[1] < -L / 2 + 0.2 ? home[1] : -L / 2 + 0.06], home], X, Y, 'cable-audio');
+  }
+  // network devices (PTZ cameras, ceiling microphones, the wireless gateway) run a network cable to the switch
+  const networked: [number, number][] = [
+    ...gear.cameras
+      .filter((c) => c.kind !== 'bar' && c.kind !== 'table')
+      .map((c): [number, number] => [c.pos[0], c.pos[2]]),
+    ...(plan.mics === 'ceiling' || plan.mics === 'pendant' ? gear.mics.map((m): [number, number] => [m[0], m[2]]) : []),
+  ];
+  for (const [x, z] of networked) draw(g, [[x, z], [x, home[1]], home], X, Y, 'cable-net');
+  if (plan.mics === 'ceiling' || plan.mics === 'pendant')
+    for (const m of gear.mics) g.circle(X(m[0]), Y(m[2]), 3, 'mic');
+  equipmentOnPlan(g, plan, a, X, Y, s);
+  if (rack?.mode === 'behind') {
+    g.rect(X(-0.25), Y(-L / 2) - 4, 0.5 * s, 8, 'rackfree');
+    g.text(X(0), Y(-L / 2) - 8, 'equipment behind the display', 'small');
+  }
+  g.text(ox, oy - 48, 'PROVIDE PULL STRING IN ALL CONDUIT', 'small', 'start');
+  titleBlock(
+    g,
+    ox,
+    oy + L * s + 50,
+    'Cabling plan',
+    plan,
+    'blue: HDMI and USB-C, green: speaker cable, amber: control, dotted: network (PoE) · AVR rack · WM microphone cabinet · CS ceiling speaker',
+    opts.bare,
+  );
+  return { id: 'cabling', title: drawingTitles.cabling, width, height, scale: s, prims: g.prims };
+}
+
+// Brand-free tags for the units of the rack, like the tags on an AV drawing: PDU-01, DSP-01, SW-01.
+const tagFor = (name: string) => {
+  const starts: [string, string][] = [
+    ['Control processor', 'CU'],
+    ['Video matrix', 'SW'],
+    ['Video switcher', 'SW'],
+    ['Video transmitter', 'TX'],
+    ['Video receiver', 'RX'],
+    ['Wireless presentation', 'AP'],
+    ['Room computer', 'PC'],
+    ["Client's laptop", 'LAPTOP'],
+    ['Audio processor', 'DSP'],
+    ['Power amplifier', 'PA'],
+    ['Wireless microphone', 'WM'],
+    ['Network switch', 'NET'],
+    ['Power distribution', 'PDU'],
+  ];
+  return starts.find(([start]) => name.startsWith(start))?.[1] ?? '';
+};
+
+// The AV system rack elevation: the units from the top down, by function and not by brand, with room kept free for
+// the client's laptop. A rack behind the display also shows the wall, with the box drawn dashed behind the display.
+export function rackElevation(plan: Plan, a: Analysis, opts: DrawingOptions = {}): Drawing {
+  const rack = a.gear.rack;
+  const g = sheet();
+  const unitPx = 24;
+  const ox = 84;
+  const oy = 64;
+  const rw = 330;
+  const u = rack ? rack.u : 6;
+  const h = u * unitPx;
+  const behind = rack?.mode === 'behind';
+  const width = ox + rw + 110 + (behind ? 330 : 0);
+  const height = oy + h + 110;
+  if (!rack) {
+    g.text(ox, oy + 20, 'No rack: the devices stand where they are used.', 'label', 'start');
+    titleBlock(g, ox, oy + 60, 'Rack elevation', plan, 'SCALE: NTS', opts.bare);
+    return { id: 'rack', title: drawingTitles.rack, width, height: oy + 150, scale: unitPx, prims: g.prims };
+  }
+  g.rect(ox - 14, oy - 14, rw + 28, h + 28, 'wall');
+  for (let i = 1; i <= u; i++) g.text(ox - 22, oy + h - (i - 0.5) * unitPx + 3.5, String(i), 'small', 'end');
+  const counts = new Map<string, number>();
+  let y = oy;
+  const used = rack.items.reduce((sum, i) => sum + i.u, 0);
+  const rows = [...rack.items, ...(u > used ? [{ name: 'Blank panel', u: u - used, kind: 'blank' as const }] : [])];
+  for (const item of rows) {
+    const hh = item.u * unitPx;
+    const tag = tagFor(item.name);
+    const n = (counts.get(tag) ?? 0) + 1;
+    counts.set(tag, n);
+    g.rect(ox, y, rw, hh, item.kind === 'laptop' ? 'rackfree' : (`rack-${item.kind}` as Style));
+    g.text(ox + 10, y + hh / 2 + 3.5, item.name, 'label', 'start');
+    if (tag && item.kind !== 'blank')
+      g.text(
+        ox + rw + 10,
+        y + hh / 2 + 3.5,
+        item.kind === 'laptop' ? tag : `${tag}-${String(n).padStart(2, '0')}`,
+        'small',
+        'start',
+      );
+    y += hh;
+  }
+  g.dim(ox + rw + 52, oy, ox + rw + 52, oy + h, -8, `${u} U`);
+
+  if (behind) {
+    // the wall: the display, and the box behind it
+    const wx = ox + rw + 110;
+    const wy = oy;
+    const k = 100; // pixels per metre of the little wall
+    const d = a.displays;
+    g.rect(wx, wy, 2.4 * k, 1.5 * k, 'wall');
+    const dw = Math.min(d.width, 2.2) * k * 0.9;
+    const dh = Math.min(d.height, 1.2) * k * 0.9;
+    g.rect(wx + 1.2 * k - dw / 2, wy + 0.18 * k, dw, dh, 'display');
+    g.text(wx + 1.2 * k, wy + 0.18 * k + dh / 2 + 4, `${d.size}"`, 'ondark');
+    g.rect(wx + 1.2 * k - 0.25 * k, wy + 0.18 * k + dh / 2 - 0.16 * k, 0.5 * k, 0.32 * k, 'rackfree');
+    g.text(wx + 1.2 * k, wy + 1.5 * k + 18, 'Equipment box on the wall behind the display', 'small');
+    g.text(wx + 1.2 * k, wy + 1.5 * k + 30, '(500 × 320 mm, dashed)', 'small');
+  }
+  const where = behind
+    ? 'Equipment box on the wall behind the display'
+    : rack.outside
+      ? 'Rack outside the room, location to be confirmed'
+      : `Rack in the room, against the ${rack.wall ?? 'front'} wall`;
+  titleBlock(g, ox - 14, oy + h + 52, 'AV system rack elevation', plan, `SCALE: NTS · ${where}`, opts.bare);
+  return { id: 'rack', title: drawingTitles.rack, width, height, scale: unitPx, prims: g.prims };
+}
+
+// The four drawings of the printed sheet, and the cabling plan and the rack elevation beside them on the screen.
+export function buildAllDrawings(plan: Plan, a: Analysis, opts: DrawingOptions = {}): Drawing[] {
+  return [...buildDrawings(plan, a, opts), cablingPlan(plan, a, opts), rackElevation(plan, a, opts)];
 }
 
 export function buildDrawings(plan: Plan, a: Analysis, opts: DrawingOptions = {}): Drawing[] {

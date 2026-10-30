@@ -4,9 +4,9 @@ import type { Prim } from '@/lib/planner/drawings';
 export const drawingStyles = `
 .s-wall{fill:none;stroke:#1f2933;stroke-width:2.4;stroke-linejoin:round}
 .s-floor{fill:none;stroke:#1f2933;stroke-width:3}
-.s-furniture{fill:#efe3d3;stroke:#7a6246;stroke-width:1.2}
+.s-furniture{fill:#f6f2ec;stroke:#c9bda9;stroke-width:1}
 .s-ref{fill:none;stroke:#8896a5;stroke-width:1;stroke-dasharray:5 4}
-.s-chair{fill:#dfe4ea;stroke:#7b8794;stroke-width:1}
+.s-chair{fill:#f0f2f5;stroke:#b4bcc6;stroke-width:.9}
 .s-display{fill:#1f2933;stroke:#1f2933}
 .s-device{fill:#c9d3de;stroke:#52606d;stroke-width:1}
 .s-speaker{fill:#d9f2e3;stroke:#2f9e68;stroke-width:1.2}
@@ -17,6 +17,20 @@ export const drawingStyles = `
 .s-grid{fill:none;stroke:#dde3e9;stroke-width:.7}
 .s-dim,.s-ext{fill:none;stroke:#b4412c;stroke-width:1}
 .s-ext{stroke-width:.6}
+.s-cable-video{fill:none;stroke:#2b6fd6;stroke-width:1.5;stroke-dasharray:7 3}
+.s-cable-audio{fill:none;stroke:#1f8a5a;stroke-width:1.5;stroke-dasharray:7 3}
+.s-cable-control{fill:none;stroke:#c98a00;stroke-width:1.5;stroke-dasharray:7 3}
+.s-cable-net{fill:none;stroke:#7b8794;stroke-width:1.1;stroke-dasharray:2 3}
+.s-rack{fill:#e9eef3;stroke:#1f2933;stroke-width:1.6}
+.s-rackfree{fill:none;stroke:#52606d;stroke-width:1.2;stroke-dasharray:6 3}
+.s-rack-control{fill:#fff1cc;stroke:#1f2933;stroke-width:1}
+.s-rack-video{fill:#dbe8ff;stroke:#1f2933;stroke-width:1}
+.s-rack-audio{fill:#dff3e8;stroke:#1f2933;stroke-width:1}
+.s-rack-network{fill:#e7ebf0;stroke:#1f2933;stroke-width:1}
+.s-rack-compute{fill:#f3f5f7;stroke:#1f2933;stroke-width:1}
+.s-rack-laptop{fill:none;stroke:#52606d;stroke-width:1.2;stroke-dasharray:6 3}
+.s-rack-power{fill:#ffe0e0;stroke:#1f2933;stroke-width:1}
+.s-rack-blank{fill:#f4f6f8;stroke:#8896a5;stroke-width:1}
 .s-person{fill:#cfe0ff;stroke:#3a6fd8;stroke-width:1.2}
 .s-frame{fill:none;stroke:#1f2933;stroke-width:1.4}
 .s-rule{fill:none;stroke:#1f2933;stroke-width:.8}
