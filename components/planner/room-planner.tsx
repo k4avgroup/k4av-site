@@ -8,6 +8,7 @@ import {
   computeLayout,
   decodePlan,
   defaultPlan,
+  displaySizes,
   encodePlan,
   formatLength,
   fromUnit,
@@ -17,7 +18,6 @@ import {
   planSummary,
   presetText,
   roomTypes,
-  rules,
   scenarios,
   seatLimits,
   tableShapes,
@@ -399,6 +399,18 @@ export default function RoomPlanner() {
               <h2>Display</h2>
               {plan.roomType !== 'huddle' && (
                 <Seg
+                  label="Kind of display"
+                  value={plan.displayType}
+                  options={[
+                    { value: 'flat', label: 'Flat panel' },
+                    { value: 'led', label: 'LED wall' },
+                    { value: 'projector', label: 'Projector and screen' },
+                  ]}
+                  onChange={(v) => set('displayType', v)}
+                />
+              )}
+              {plan.roomType !== 'huddle' && plan.displayType !== 'led' && (
+                <Seg
                   label="Number of displays"
                   value={plan.displays}
                   options={[
@@ -409,20 +421,45 @@ export default function RoomPlanner() {
                 />
               )}
               <div className="planner-field">
-                <label htmlFor="planner-size">Display size</label>
+                <label htmlFor="planner-size">
+                  {plan.displayType === 'projector'
+                    ? 'Screen size'
+                    : plan.displayType === 'led'
+                      ? 'Wall size'
+                      : 'Display size'}
+                </label>
                 <select
                   id="planner-size"
                   value={plan.displaySize ?? ''}
                   onChange={(e) => set('displaySize', e.target.value ? Number(e.target.value) : null)}
                 >
                   <option value="">{displays.recommended}&quot; (recommended)</option>
-                  {rules.sizes.map((s) => (
+                  {displaySizes(plan.displayType).map((s) => (
                     <option key={s} value={s}>
                       {s}&quot;
                     </option>
                   ))}
                 </select>
               </div>
+              {plan.roomType === 'training' && (
+                <Check
+                  label="Interactive whiteboard"
+                  checked={plan.whiteboard}
+                  onChange={(v) => set('whiteboard', v)}
+                  hint="On the wall beside the display"
+                />
+              )}
+              <Seg
+                label="Sharing from laptops"
+                value={plan.sharing}
+                options={[
+                  { value: 'none', label: 'None' },
+                  { value: 'cable', label: 'On a cable' },
+                  { value: 'wireless', label: 'Wireless' },
+                  { value: 'both', label: 'Both' },
+                ]}
+                onChange={(v) => set('sharing', v)}
+              />
               <div className="planner-field">
                 <label htmlFor="planner-read">Small text matters</label>
                 <input
@@ -441,7 +478,16 @@ export default function RoomPlanner() {
               </div>
               <p className="planner-hint">
                 Farthest seat: {formatLength(displays.farthest, u)}. With these settings, small text stays readable up
-                to {formatLength(displays.maxDistance, u)}.
+                to {formatLength(displays.maxDistance, u)}.{' '}
+                {plan.displayType === 'led' &&
+                  'An LED wall is built to the room from cabinets, so the sizes here are steps along the way. '}
+                {displays.projector &&
+                  (displays.projector.short
+                    ? 'The room is short, so the projector has a short-throw lens and hangs close to the screen. '
+                    : `The projector hangs ${formatLength(displays.projector.throw, u)} in front of the screen. `)}
+                {plan.sharing === 'wireless' || plan.sharing === 'both'
+                  ? 'A wireless gateway lets people share a laptop without a cable.'
+                  : ''}
               </p>
             </>
           )}
@@ -449,27 +495,58 @@ export default function RoomPlanner() {
           {step === 3 && (
             <>
               <h2>Audio</h2>
+              {plan.bar !== 'none' && (
+                <p className="planner-hint">
+                  The video bar has microphones and speakers of its own. Add more below if the room needs them.
+                </p>
+              )}
               <Seg
                 label="Speakers"
                 value={plan.speakers}
                 options={[
-                  { value: 'none', label: 'None' },
-                  { value: 'soundbar', label: 'Soundbar' },
+                  { value: 'none', label: plan.bar !== 'none' ? 'Bar only' : 'None' },
                   { value: 'front', label: 'Wall pair' },
-                  { value: 'ceiling', label: 'Ceiling' },
+                  ...(plan.roomType === 'huddle'
+                    ? []
+                    : [
+                        { value: 'ceiling' as const, label: 'Ceiling' },
+                        { value: 'both' as const, label: 'Wall and ceiling' },
+                      ]),
                 ]}
                 onChange={(v) => set('speakers', v)}
               />
-              {plan.speakers === 'ceiling' && (
-                <Seg
-                  label="Ceiling speakers"
-                  value={plan.speakerCoverage}
-                  options={[
-                    { value: 'partial', label: 'Fewer' },
-                    { value: 'full', label: 'Full coverage' },
-                  ]}
-                  onChange={(v) => set('speakerCoverage', v)}
-                />
+              {(plan.speakers === 'ceiling' || plan.speakers === 'both') && (
+                <>
+                  <Seg
+                    label="Ceiling speaker size"
+                    value={plan.speakerSize}
+                    options={[
+                      { value: 4, label: '4 to 5 in' },
+                      { value: 7, label: '7 in' },
+                      { value: 8, label: '8 in' },
+                      { value: 10, label: '10 in' },
+                    ]}
+                    onChange={(v) => set('speakerSize', v)}
+                  />
+                  <Seg
+                    label="Ceiling speaker mounting"
+                    value={plan.speakerMount}
+                    options={[
+                      { value: 'flush', label: 'In the ceiling' },
+                      { value: 'pendant', label: 'On cords' },
+                    ]}
+                    onChange={(v) => set('speakerMount', v)}
+                  />
+                  <Seg
+                    label="Ceiling speaker coverage"
+                    value={plan.speakerCoverage}
+                    options={[
+                      { value: 'standard', label: 'Standard' },
+                      { value: 'dense', label: 'Dense' },
+                    ]}
+                    onChange={(v) => set('speakerCoverage', v)}
+                  />
+                </>
               )}
               <Check
                 label="Show where the sound reaches"
@@ -486,14 +563,19 @@ export default function RoomPlanner() {
                 label="Microphones"
                 value={plan.mics}
                 options={[
-                  { value: 'none', label: 'None' },
-                  { value: 'integrated', label: 'Built-in' },
+                  { value: 'none', label: plan.bar !== 'none' ? 'Bar only' : 'None' },
                   ...(plan.roomType === 'training' ? [] : [{ value: 'table' as const, label: 'Table' }]),
-                  { value: 'ceiling', label: 'Ceiling' },
+                  ...(plan.roomType === 'huddle'
+                    ? []
+                    : [
+                        { value: 'ceiling' as const, label: 'Ceiling' },
+                        { value: 'pendant' as const, label: 'On cords' },
+                        { value: 'gooseneck' as const, label: 'Gooseneck' },
+                      ]),
                 ]}
                 onChange={(v) => set('mics', v)}
               />
-              {plan.mics === 'ceiling' && (
+              {(plan.mics === 'ceiling' || plan.mics === 'pendant') && (
                 <Seg
                   label="Array shape"
                   value={plan.micShape}
@@ -509,12 +591,34 @@ export default function RoomPlanner() {
                 checked={plan.micCoverage}
                 onChange={(v) => set('micCoverage', v)}
               />
+              {plan.roomType !== 'huddle' && (
+                <>
+                  <Seg
+                    label="Wireless microphones"
+                    value={plan.wireless}
+                    options={[
+                      { value: 0, label: 'None' },
+                      { value: 2, label: 'Two' },
+                      { value: 4, label: 'Four' },
+                    ]}
+                    onChange={(v) => set('wireless', v)}
+                  />
+                  <Check
+                    label="Audio processor"
+                    checked={plan.dsp}
+                    onChange={(v) => set('dsp', v)}
+                    hint="Echo cancellation and mixing"
+                  />
+                </>
+              )}
               <p className="planner-hint">
-                {plan.speakers === 'ceiling' &&
-                  `${gear.speakers.length} ceiling speakers, ${plan.speakerCoverage === 'full' ? 'even coverage of the seating area' : 'fewer, for the main seating area'}. `}
-                {plan.mics === 'ceiling' &&
+                {gear.speakers.length > 0 &&
+                  `${gear.speakers.length} ceiling speakers, ${plan.speakerCoverage === 'dense' ? 'close together for even sound' : 'an even grid over the seats'}. `}
+                {(plan.mics === 'ceiling' || plan.mics === 'pendant') &&
                   `${gear.mics.length} microphone array${gear.mics.length > 1 ? 's' : ''}, ${plan.micShape === 'round' ? 'round 25 in (635 mm)' : 'square 24 in (604 mm)'}, sized like the Shure MXA920. `}
-                {plan.mics === 'table' && `${gear.mics.length} table microphones. `}
+                {plan.mics === 'table' && `${gear.mics.length} table microphone${gear.mics.length > 1 ? 's' : ''}. `}
+                {plan.mics === 'gooseneck' && `${gear.mics.length} gooseneck microphones, one for every two seats. `}
+                {plan.presenter && 'The presenter always has a wireless microphone. '}
                 Coverage is a simplified sketch, not an acoustic simulation.
               </p>
             </>
@@ -524,16 +628,50 @@ export default function RoomPlanner() {
             <>
               <h2>Video</h2>
               <Seg
-                label="Audience cameras"
-                value={plan.cameras}
+                label="All-in-one video bar"
+                value={plan.bar}
                 options={[
-                  { value: 'none', label: 'None' },
-                  { value: 'one', label: 'One' },
-                  { value: 'two', label: 'Two' },
+                  { value: 'none', label: 'No bar' },
+                  { value: 'compact', label: 'Compact' },
+                  { value: 'large', label: 'Large' },
                 ]}
-                onChange={(v) => set('cameras', v)}
+                onChange={(v) => set('bar', v)}
               />
-              {plan.cameras === 'one' && (
+              {plan.bar !== 'none' && (
+                <>
+                  <Seg
+                    label="Bar position"
+                    value={plan.cameraSpot}
+                    options={[
+                      { value: 'above', label: 'Above the display' },
+                      { value: 'below', label: 'Below the display' },
+                    ]}
+                    onChange={(v) => set('cameraSpot', v)}
+                  />
+                  {plan.system !== 'byod' && (
+                    <Check
+                      label="Separate room computer"
+                      checked={plan.engine}
+                      onChange={(v) => set('engine', v)}
+                      hint="Otherwise the bar runs the meeting platform itself"
+                    />
+                  )}
+                </>
+              )}
+              {plan.bar === 'none' && (
+                <Seg
+                  label="Cameras at the display"
+                  value={plan.cameras}
+                  options={[
+                    { value: 'none', label: 'None' },
+                    { value: 'one', label: 'One' },
+                    { value: 'two', label: 'Two' },
+                    { value: 'pairs', label: 'Two pairs' },
+                  ]}
+                  onChange={(v) => set('cameras', v)}
+                />
+              )}
+              {plan.bar === 'none' && plan.cameras === 'one' && (
                 <Seg
                   label="Camera position"
                   value={plan.cameraSpot}
@@ -544,7 +682,7 @@ export default function RoomPlanner() {
                   onChange={(v) => set('cameraSpot', v)}
                 />
               )}
-              {plan.cameras === 'two' && (
+              {plan.bar === 'none' && plan.cameras === 'two' && (
                 <Seg
                   label="Camera positions"
                   value={plan.cameraSpot}
@@ -555,24 +693,62 @@ export default function RoomPlanner() {
                   onChange={(v) => set('cameraSpot', v)}
                 />
               )}
+              {plan.roomType !== 'training' && (
+                <Check
+                  label="Camera on the table"
+                  checked={plan.tableCamera}
+                  onChange={(v) => set('tableCamera', v)}
+                  hint="Small and round: close-up faces around the table"
+                />
+              )}
+              {plan.roomType !== 'huddle' && (
+                <>
+                  <Count
+                    label="Cameras on the side walls"
+                    value={plan.wallCameras}
+                    min={0}
+                    max={4}
+                    onChange={(n) => set('wallCameras', n)}
+                  />
+                  <Count
+                    label="Cameras at the back"
+                    value={plan.backCameras}
+                    min={plan.presenter ? 1 : 0}
+                    max={2}
+                    onChange={(n) => set('backCameras', n)}
+                  />
+                </>
+              )}
               <Check
                 label="Show what the cameras see"
                 checked={plan.cameraView}
                 onChange={(v) => set('cameraView', v)}
               />
               <p className="planner-hint">
-                {plan.cameras === 'none' && 'No audience camera: remote people do not see the room.'}
-                {plan.cameras === 'one' &&
+                {plan.bar !== 'none' &&
+                  `One bar ${plan.cameraSpot === 'below' ? 'below' : 'above'} the display, with the camera, microphones and speakers in it. ${plan.bar === 'compact' ? 'The compact one suits a huddle room.' : 'The large one suits a medium room.'}`}
+                {plan.bar === 'none' &&
+                  plan.cameras === 'none' &&
+                  'No camera at the display: remote people do not see the room.'}
+                {plan.bar === 'none' &&
+                  plan.cameras === 'one' &&
                   (plan.cameraSpot === 'above'
                     ? 'One PTZ camera on the centre line above the display: the usual choice, and it works for most rooms.'
                     : 'One PTZ camera on the centre line below the display, close to seated eye level. The display is mounted higher to make room for it.')}
-                {plan.cameras === 'two' &&
+                {plan.bar === 'none' &&
+                  plan.cameras === 'two' &&
                   (plan.cameraSpot === 'both'
                     ? 'Two PTZ cameras on the centre line, one above the display and one below it, close to seated eye level. The display is mounted higher.'
                     : 'Two PTZ cameras on both sides of the display, aimed across the table so the system can pick the face-on view of whoever speaks.')}
-                {plan.cameras !== 'none' && ' Sized like the Q-SYS NC-12x80: 170 × 201 × 142 mm.'}
+                {plan.bar === 'none' &&
+                  plan.cameras === 'pairs' &&
+                  'Two PTZ cameras on each side of the display. The system switches between them without a visible cut.'}
+                {plan.bar === 'none' &&
+                  plan.cameras !== 'none' &&
+                  ' PTZ cameras are sized like the Q-SYS NC-12x80: 170 × 201 × 142 mm.'}{' '}
+                {plan.wallCameras > 0 && 'Side-wall cameras look across the table. '}
                 {plan.presenter &&
-                  ' The presenter has a camera of their own at the back of the room, added automatically; it follows them.'}
+                  'The presenter has a camera of their own at the back of the room, added automatically; it follows them.'}
               </p>
             </>
           )}

@@ -15,6 +15,7 @@ import {
   PlaneGeometry,
   Quaternion,
   Raycaster,
+  RepeatWrapping,
   Shape,
   SRGBColorSpace,
   TOUCH,
@@ -399,6 +400,7 @@ function Display({
   h,
   z,
   texture,
+  frame = '#0b0d10',
 }: {
   x: number;
   y: number;
@@ -406,12 +408,13 @@ function Display({
   h: number;
   z: number;
   texture: CanvasTexture;
+  frame?: string;
 }) {
   return (
     <group position={[x, y, z]}>
       <mesh>
         <boxGeometry args={[w + 0.04, h + 0.04, 0.05]} />
-        <meshStandardMaterial color="#0b0d10" />
+        <meshStandardMaterial color={frame} />
       </mesh>
       <mesh position={[0, 0, 0.026]}>
         <planeGeometry args={[w, h]} />
@@ -671,18 +674,59 @@ function CameraBody({
   const dz = cam.target[2] - cam.pos[2];
   const yaw = Math.atan2(dx, dz);
   const pitch = Math.asin(-dy / Math.hypot(dx, dy, dz));
-  const wallZ = (cam.pos[2] < 0 ? -room.length : room.length) / 2 - cam.pos[2];
-  const outward = Math.sign(wallZ);
+  // the wall it hangs on: the bracket reaches from the camera to that wall, whichever wall it is
+  const toWall =
+    cam.wall === 'front'
+      ? [0, -room.length / 2 - cam.pos[2]]
+      : cam.wall === 'back'
+        ? [0, room.length / 2 - cam.pos[2]]
+        : cam.wall === 'left'
+          ? [-room.width / 2 - cam.pos[0], 0]
+          : [room.width / 2 - cam.pos[0], 0];
+  const reachWall = Math.hypot(toWall[0], toWall[1]);
+  const bracketYaw = Math.atan2(toWall[0], toWall[1]);
+  const view = showView && (
+    <group quaternion={quaternion}>
+      <mesh geometry={geometry}>
+        <meshBasicMaterial color={COLORS.camera} transparent opacity={0.07} side={DoubleSide} depthWrite={false} />
+      </mesh>
+      <lineSegments geometry={edges}>
+        <lineBasicMaterial color={COLORS.camera} transparent opacity={0.55} />
+      </lineSegments>
+    </group>
+  );
+  // a video bar draws itself; only what its camera sees belongs here
+  if (cam.kind === 'bar') return <group position={cam.pos}>{view}</group>;
+  // a small round camera standing on the table
+  if (cam.kind === 'table') {
+    return (
+      <group position={cam.pos}>
+        <mesh>
+          <cylinderGeometry args={[0.05, 0.05, 0.2, 28]} />
+          <meshStandardMaterial color="#2b3038" roughness={0.6} />
+        </mesh>
+        <group rotation={[0, yaw, 0]}>
+          <mesh position={[0, 0.04, 0.047]}>
+            <boxGeometry args={[0.07, 0.05, 0.01]} />
+            <meshStandardMaterial color="#05070b" roughness={0.2} metalness={0.6} />
+          </mesh>
+        </group>
+        {view}
+      </group>
+    );
+  }
   return (
     <group position={cam.pos}>
-      <mesh position={[0, -0.09, wallZ - outward * 0.007]}>
-        <boxGeometry args={[0.14, 0.24, 0.014]} />
-        <meshStandardMaterial color="#cfd3da" />
-      </mesh>
-      <mesh position={[0, -0.15, wallZ / 2]}>
-        <boxGeometry args={[0.12, 0.03, Math.abs(wallZ)]} />
-        <meshStandardMaterial color="#aeb4bd" />
-      </mesh>
+      <group rotation={[0, bracketYaw, 0]}>
+        <mesh position={[0, -0.09, reachWall - 0.007]}>
+          <boxGeometry args={[0.14, 0.24, 0.014]} />
+          <meshStandardMaterial color="#cfd3da" />
+        </mesh>
+        <mesh position={[0, -0.15, reachWall / 2]}>
+          <boxGeometry args={[0.12, 0.03, reachWall]} />
+          <meshStandardMaterial color="#aeb4bd" />
+        </mesh>
+      </group>
       <mesh position={[0, -0.1, 0]}>
         <boxGeometry args={[0.17, 0.07, 0.142]} />
         <meshStandardMaterial color="#2b3038" roughness={0.6} />
@@ -707,19 +751,92 @@ function CameraBody({
           </mesh>
         </group>
       </group>
-      {showView && (
-        <group quaternion={quaternion}>
-          <mesh geometry={geometry}>
-            <meshBasicMaterial color={COLORS.camera} transparent opacity={0.07} side={DoubleSide} depthWrite={false} />
-          </mesh>
-          <lineSegments geometry={edges}>
-            <lineBasicMaterial color={COLORS.camera} transparent opacity={0.55} />
-          </lineSegments>
-        </group>
-      )}
+      {view}
     </group>
   );
 }
+const WALL_ANGLE = 45; // degrees: half the angle a wall speaker covers
+const SPEAKER_RADIUS: Record<number, number> = { 4: 0.09, 7: 0.13, 8: 0.15, 10: 0.18 }; // baffle radius by cone size
+const BAR_PICKUP = 4.5; // how far a video bar's own microphones hear, in metres
+
+// An all-in-one video bar: a speaker grille along the front with the camera lens in the middle.
+function VideoBar({ bar }: { bar: NonNullable<Analysis['gear']['bar']> }) {
+  return (
+    <group position={bar.pos}>
+      <mesh>
+        <boxGeometry args={[bar.width, bar.height, bar.depth]} />
+        <meshStandardMaterial color="#1a1d23" roughness={0.6} />
+      </mesh>
+      <mesh position={[0, 0, bar.depth / 2 + 0.001]}>
+        <boxGeometry args={[bar.width * 0.94, bar.height * 0.72, 0.002]} />
+        <meshStandardMaterial color="#303640" />
+      </mesh>
+      <mesh position={[0, 0, bar.depth / 2 + 0.004]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[bar.height * 0.3, bar.height * 0.3, 0.008, 24]} />
+        <meshStandardMaterial color="#05070b" roughness={0.2} metalness={0.6} />
+      </mesh>
+    </group>
+  );
+}
+
+// Thin cords from something hung below the ceiling up to the ceiling. `top` is the height of the thing's top face.
+function Cords({ x, z, top, ceiling, spread }: { x: number; z: number; top: number; ceiling: number; spread: number }) {
+  const length = Math.max(0.01, ceiling - top);
+  return (
+    <group position={[x, top + length / 2, z]}>
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * spread, 0, 0]}>
+          <cylinderGeometry args={[0.004, 0.004, length, 6]} />
+          <meshStandardMaterial color="#8b929c" />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+// A gooseneck microphone: a small base on the table, a thin stalk and the capsule at the top.
+function Gooseneck({ position }: { position: Vec3 }) {
+  return (
+    <group position={position}>
+      <mesh>
+        <cylinderGeometry args={[0.04, 0.045, 0.03, 16]} />
+        <meshStandardMaterial color="#14171c" />
+      </mesh>
+      <mesh position={[0, 0.16, 0]}>
+        <cylinderGeometry args={[0.006, 0.006, 0.3, 8]} />
+        <meshStandardMaterial color="#14171c" />
+      </mesh>
+      <mesh position={[0, 0.33, 0]}>
+        <capsuleGeometry args={[0.012, 0.04, 4, 8]} />
+        <meshStandardMaterial color="#14171c" />
+      </mesh>
+      <mesh position={[0, 0.02, 0]}>
+        <torusGeometry args={[0.03, 0.004, 8, 20]} />
+        <meshBasicMaterial color="#3ddc84" />
+      </mesh>
+    </group>
+  );
+}
+
+// A ceiling speaker hung on cords: a short drum with a dark grille underneath.
+function PendantSpeaker({ position, radius, ceiling }: { position: Vec3; radius: number; ceiling: number }) {
+  return (
+    <group>
+      <group position={position}>
+        <mesh>
+          <cylinderGeometry args={[radius, radius, 0.16, 24]} />
+          <meshStandardMaterial color="#f2f4f6" />
+        </mesh>
+        <mesh position={[0, -0.081, 0]}>
+          <cylinderGeometry args={[radius * 0.85, radius * 0.85, 0.004, 24]} />
+          <meshStandardMaterial color="#2b3038" />
+        </mesh>
+      </group>
+      <Cords x={position[0]} z={position[2]} top={position[1] + 0.08} ceiling={ceiling} spread={radius * 0.6} />
+    </group>
+  );
+}
+
 function Equipment({
   plan,
   a,
@@ -733,59 +850,60 @@ function Equipment({
   const spot = presenterSpot(plan, displays);
   const ear = rules.earHeight;
   const frontZ = -plan.length / 2;
+  const angle = rules.speakerAngle[plan.speakerSize];
+  const baffle = SPEAKER_RADIUS[plan.speakerSize];
   return (
     <group>
-      {/* speakers */}
-      {gear.soundbar && (
-        <mesh position={gear.soundbar.pos}>
-          <boxGeometry args={[gear.soundbar.width, 0.07, 0.1]} />
-          <meshStandardMaterial color="#14171c" />
+      {/* the video bar and its microphones */}
+      {gear.bar && <VideoBar bar={gear.bar} />}
+      {gear.bar && plan.micCoverage && (
+        <mesh position={[0, ear, frontZ + 0.1]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[BAR_PICKUP, 48, Math.PI, Math.PI]} />
+          <meshBasicMaterial color={COLORS.mic} transparent opacity={0.14} side={DoubleSide} depthWrite={false} />
         </mesh>
       )}
-      {plan.speakers === 'front' &&
-        gear.speakers.map((p, i) => (
-          <group key={`sp-${i}`}>
+
+      {/* speakers: a pair beside the display, and ceiling speakers, flush or hung on cords */}
+      {gear.wallSpeakers.map((p, i) => (
+        <group key={`sp-${i}`}>
+          <mesh position={p}>
+            <boxGeometry args={[0.16, 0.36, 0.14]} />
+            <meshStandardMaterial color="#14171c" />
+          </mesh>
+          {plan.speakerCones && (
+            <ConeVolume
+              apex={p}
+              base={gear.wallTargets[i]}
+              halfAngle={WALL_ANGLE}
+              color={COLORS.speaker}
+              opacity={0.13}
+            />
+          )}
+        </group>
+      ))}
+      {gear.speakers.map((p, i) => (
+        <group key={`cs-${i}`}>
+          {plan.speakerMount === 'pendant' ? (
+            <PendantSpeaker position={p} radius={baffle} ceiling={plan.height} />
+          ) : (
             <mesh position={p}>
-              <boxGeometry args={[0.16, 0.36, 0.14]} />
-              <meshStandardMaterial color="#14171c" />
-            </mesh>
-            {plan.speakerCones && (
-              <ConeVolume
-                apex={p}
-                base={gear.speakerTargets[i]}
-                halfAngle={rules.speakerHalfAngle}
-                color={COLORS.speaker}
-                opacity={0.13}
-              />
-            )}
-          </group>
-        ))}
-      {plan.speakers === 'ceiling' &&
-        gear.speakers.map((p, i) => (
-          <group key={`cs-${i}`}>
-            <mesh position={p}>
-              <cylinderGeometry args={[0.1, 0.1, 0.03, 20]} />
+              <cylinderGeometry args={[baffle, baffle, 0.03, 24]} />
               <meshStandardMaterial color="#f2f4f6" />
             </mesh>
-            {plan.speakerCones && (
-              <>
-                <ConeVolume
-                  apex={p}
-                  base={[p[0], ear, p[2]]}
-                  halfAngle={rules.speakerHalfAngle}
-                  color={COLORS.speaker}
-                  opacity={0.12}
-                />
-                <Disc
-                  position={[p[0], ear + 0.005, p[2]]}
-                  radius={gear.speakerRadius}
-                  color={COLORS.speaker}
-                  opacity={0.1}
-                />
-              </>
-            )}
-          </group>
-        ))}
+          )}
+          {plan.speakerCones && (
+            <>
+              <ConeVolume apex={p} base={[p[0], ear, p[2]]} halfAngle={angle} color={COLORS.speaker} opacity={0.12} />
+              <Disc
+                position={[p[0], ear + 0.005, p[2]]}
+                radius={gear.speakerRadius}
+                color={COLORS.speaker}
+                opacity={0.1}
+              />
+            </>
+          )}
+        </group>
+      ))}
       {plan.listeningPlane && (
         <mesh position={[0, ear, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[plan.width - 0.1, plan.length - 0.1]} />
@@ -793,11 +911,20 @@ function Equipment({
         </mesh>
       )}
 
-      {/* microphones */}
-      {plan.mics === 'ceiling' &&
+      {/* microphones: ceiling arrays, arrays on cords, on the table, or gooseneck */}
+      {(plan.mics === 'ceiling' || plan.mics === 'pendant') &&
         gear.mics.map((p, i) => (
           <group key={`ma-${i}`}>
             <MicArray position={p} shape={plan.micShape} />
+            {plan.mics === 'pendant' && (
+              <Cords
+                x={p[0]}
+                z={p[2]}
+                top={p[1] + 0.02}
+                ceiling={plan.height}
+                spread={rules.micArray[plan.micShape].size * 0.35}
+              />
+            )}
             {plan.micCoverage && (
               <>
                 <ConeVolume
@@ -824,12 +951,15 @@ function Equipment({
             )}
           </group>
         ))}
-      {plan.mics === 'integrated' && plan.micCoverage && (
-        <mesh position={[0, ear, frontZ + 0.1]} rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[gear.micRadius, 48, Math.PI, Math.PI]} />
-          <meshBasicMaterial color={COLORS.mic} transparent opacity={0.14} side={DoubleSide} depthWrite={false} />
-        </mesh>
-      )}
+      {plan.mics === 'gooseneck' &&
+        gear.mics.map((p, i) => (
+          <group key={`mg-${i}`}>
+            <Gooseneck position={p} />
+            {plan.micCoverage && (
+              <Disc position={[p[0], p[1] + 0.02, p[2]]} radius={gear.micRadius} color={COLORS.mic} opacity={0.16} />
+            )}
+          </group>
+        ))}
 
       {/* cameras */}
       {gear.cameras.map((c, i) => (
@@ -867,22 +997,175 @@ function Equipment({
   );
 }
 
-// One texture shared by both displays.
+// The grid of cabinets that an LED wall is built from (600 x 337.5 mm), laid over the picture.
+function LedGrid({ w, h, z }: { w: number; h: number; z: number }) {
+  const texture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 36;
+    const g = canvas.getContext('2d');
+    if (g) {
+      g.strokeStyle = 'rgba(0,0,0,0.55)';
+      g.lineWidth = 2;
+      g.strokeRect(0, 0, 64, 36);
+    }
+    const t = new CanvasTexture(canvas);
+    t.wrapS = t.wrapT = RepeatWrapping;
+    t.repeat.set(w / 0.6, h / 0.3375);
+    return t;
+  }, [w, h]);
+  useEffect(() => () => texture.dispose(), [texture]);
+  return (
+    <mesh position={[0, 0, z]}>
+      <planeGeometry args={[w, h]} />
+      <meshBasicMaterial map={texture} transparent depthWrite={false} />
+    </mesh>
+  );
+}
+
+// A projector on a pole from the ceiling, and the cone of light down to the screen.
+function ProjectorUnit({
+  x,
+  y,
+  z,
+  ceiling,
+  screen,
+  screenZ,
+}: {
+  x: number;
+  y: number;
+  z: number;
+  ceiling: number;
+  screen: { y: number; w: number; h: number };
+  screenZ: number;
+}) {
+  const geometry = useMemo(() => {
+    const g = new BufferGeometry();
+    const lens = [0, -0.02, -0.18];
+    const dz = screenZ - z - lens[2];
+    g.setAttribute(
+      'position',
+      new Float32BufferAttribute(
+        [
+          ...lens,
+          -screen.w / 2,
+          screen.y + screen.h / 2 - y,
+          dz,
+          screen.w / 2,
+          screen.y + screen.h / 2 - y,
+          dz,
+          screen.w / 2,
+          screen.y - screen.h / 2 - y,
+          dz,
+          -screen.w / 2,
+          screen.y - screen.h / 2 - y,
+          dz,
+        ],
+        3,
+      ),
+    );
+    g.setIndex([0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 1]);
+    return g;
+  }, [y, z, screen.y, screen.w, screen.h, screenZ]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  return (
+    <group position={[x, y, z]}>
+      <mesh>
+        <boxGeometry args={[0.4, 0.14, 0.32]} />
+        <meshStandardMaterial color="#e4e7ea" />
+      </mesh>
+      <mesh position={[0, -0.02, -0.165]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.045, 0.05, 0.03, 20]} />
+        <meshStandardMaterial color="#0c0f14" roughness={0.3} />
+      </mesh>
+      <mesh position={[0, (ceiling - y) / 2, 0]}>
+        <cylinderGeometry args={[0.02, 0.02, ceiling - y, 8]} />
+        <meshStandardMaterial color="#8b929c" />
+      </mesh>
+      <mesh geometry={geometry}>
+        <meshBasicMaterial color="#fff6d6" transparent opacity={0.07} side={DoubleSide} depthWrite={false} />
+      </mesh>
+    </group>
+  );
+}
+
+// An interactive whiteboard: a flat panel with a few marker strokes on it.
+function Whiteboard({ wb, z }: { wb: NonNullable<Analysis['displays']['whiteboard']>; z: number }) {
+  const strokes: [number, number, number, string][] = [
+    [-0.45, 0.28, 0.7, '#3a86ff'],
+    [-0.3, 0.12, 0.95, '#ff8a4c'],
+    [0.35, -0.08, 0.6, '#47c28b'],
+  ];
+  return (
+    <group position={[wb.x, wb.centerY, z]}>
+      <mesh>
+        <boxGeometry args={[wb.width + 0.06, wb.height + 0.06, 0.05]} />
+        <meshStandardMaterial color="#20242a" />
+      </mesh>
+      <mesh position={[0, 0, 0.026]}>
+        <planeGeometry args={[wb.width, wb.height]} />
+        <meshStandardMaterial color="#eef1f5" />
+      </mesh>
+      {strokes.map(([sx, sy, len, color]) => (
+        <mesh key={color} position={[sx, sy, 0.027]}>
+          <planeGeometry args={[len, 0.025]} />
+          <meshBasicMaterial color={color} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+// One texture shared by the displays. A projector comes with its screen in a case under the ceiling, an LED wall with
+// a grid of cabinets, and a classroom may have a whiteboard beside it.
 function Displays({ plan, displays }: { plan: Plan; displays: Analysis['displays'] }) {
   const texture = useScreenTexture();
+  const z = -plan.length / 2 + 0.03;
+  const top = displays.centerY + displays.height / 2;
+  const projector = displays.type === 'projector';
   return (
     <>
       {displays.xs.map((x, i) => (
-        <Display
-          key={i}
-          x={x}
-          y={displays.centerY}
-          w={displays.width}
-          h={displays.height}
-          z={-plan.length / 2 + 0.03}
-          texture={texture}
-        />
+        <group key={i}>
+          <Display
+            x={x}
+            y={displays.centerY}
+            w={displays.width}
+            h={displays.height}
+            z={z}
+            texture={texture}
+            frame={projector ? '#d9dce0' : '#0b0d10'}
+          />
+          {displays.type === 'led' && (
+            <group position={[x, displays.centerY, z + 0.027]}>
+              <LedGrid w={displays.width} h={displays.height} z={0.001} />
+            </group>
+          )}
+          {projector && (
+            <>
+              <mesh position={[x, plan.height - 0.06, z + 0.05]}>
+                <boxGeometry args={[displays.width + 0.12, 0.12, 0.12]} />
+                <meshStandardMaterial color="#cfd3d8" />
+              </mesh>
+              <mesh position={[x, (plan.height - 0.12 + top) / 2, z + 0.01]}>
+                <boxGeometry args={[displays.width * 0.96, Math.max(0.01, plan.height - 0.12 - top), 0.006]} />
+                <meshStandardMaterial color="#e6e8eb" />
+              </mesh>
+              {displays.projector && (
+                <ProjectorUnit
+                  x={x}
+                  y={displays.projector.pos[1]}
+                  z={displays.projector.pos[2]}
+                  ceiling={plan.height}
+                  screen={{ y: displays.centerY, w: displays.width, h: displays.height }}
+                  screenZ={z + 0.03}
+                />
+              )}
+            </>
+          )}
+        </group>
       ))}
+      {displays.whiteboard && <Whiteboard wb={displays.whiteboard} z={z} />}
     </>
   );
 }

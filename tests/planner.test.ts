@@ -88,6 +88,7 @@ test('cameras, panels and controls follow the choices', () => {
   assert.equal(analyze(plan({ cameras: 'one' })).gear.cameras.length, 1);
   assert.equal(analyze(plan({ cameras: 'two' })).gear.cameras.length, 2);
   assert.equal(analyze(plan({ cameras: 'three' })).gear.cameras.length, 3);
+  assert.equal(analyze(plan({ cameras: 'pairs' })).gear.cameras.length, 4);
   assert.equal(analyze(plan({ tablePanels: false })).gear.panels.length, 0);
   assert.ok(analyze(plan({ tablePanels: true, seats: 14 })).gear.panels.length >= 2);
   assert.equal(analyze(plan({ control: 'none' })).gear.control, null);
@@ -98,7 +99,7 @@ test('the equipment list adds an audio processor and a PoE switch where the desi
   const ceiling = analyze(plan({ speakers: 'ceiling', mics: 'ceiling' })).items.map((i) => i.name);
   assert.ok(ceiling.some((n) => n.startsWith('Audio processor')));
   assert.ok(ceiling.some((n) => n.startsWith('Network switch')));
-  const simple = analyze(plan({ speakers: 'soundbar', mics: 'integrated' })).items.map((i) => i.name);
+  const simple = analyze(plan({ bar: 'large', speakers: 'none', mics: 'none', dsp: false })).items.map((i) => i.name);
   assert.ok(!simple.some((n) => n.startsWith('Audio processor')));
   assert.ok(simple.some((n) => n.startsWith('Installation')));
 });
@@ -108,9 +109,11 @@ test('warnings point out designs that cannot work for a hybrid meeting', () => {
   assert.ok(w.some((x) => x.includes('no microphones')));
   assert.ok(w.some((x) => x.includes('no camera')));
   assert.ok(w.some((x) => x.includes('No speakers')));
-  assert.equal(
-    analyze(plan({ system: 'byod', mics: 'none', cameras: 'none', speakers: 'soundbar' })).warnings.length,
-    0,
+  assert.deepEqual(
+    analyze(plan({ system: 'byod', bar: 'large', mics: 'none', cameras: 'none', speakers: 'none', dsp: false }))
+      .warnings,
+    [],
+    'a video bar brings its own camera, microphones and speakers',
   );
 });
 
@@ -120,8 +123,9 @@ test('packages are complete starting points that keep the room and the table', (
   const premium = applyPreset(room, 'premium');
   assert.equal(essential.length, 9);
   assert.equal(essential.seats, 12);
-  assert.equal(essential.cameras, 'one');
-  assert.equal(premium.cameras, 'two');
+  assert.equal(essential.bar, 'large', 'the first package of a conference room is a larger video bar');
+  assert.equal(premium.cameras, 'one');
+  assert.equal(premium.wallCameras, 2);
   assert.equal(premium.presenter, true, 'the top package has a presenter, so a presenter camera');
   assert.equal(premium.displays, 2);
   assert.ok(analyze(premium).items.length > analyze(essential).items.length - 1);
@@ -256,14 +260,19 @@ test('a presenter dropped on the table or the chairs is moved to the nearest fre
 });
 
 test('the signal flow connects every device, always from left to right', () => {
-  for (const cameras of ['none', 'one', 'two', 'three']) {
-    for (const speakers of ['none', 'soundbar', 'front', 'ceiling']) {
-      for (const mics of ['none', 'integrated', 'table', 'ceiling']) {
+  for (const cameras of ['none', 'one', 'two', 'pairs', 'three']) {
+    for (const speakers of ['none', 'front', 'ceiling', 'both']) {
+      for (const mics of ['none', 'table', 'ceiling', 'pendant', 'gooseneck']) {
         for (const tablePanels of [true, false]) {
           for (const control of ['none', 'table', 'wall']) {
-            const p = plan({ cameras, speakers, mics, tablePanels, control });
+            const extra = [
+              { bar: 'none', dsp: true, sharing: 'cable' },
+              { bar: 'compact', dsp: false, sharing: 'wireless', engine: true, tableCamera: true, wireless: 2 },
+              { bar: 'large', dsp: true, sharing: 'both', engine: false, whiteboard: true },
+            ][(speakers.length + mics.length + control.length) % 3];
+            const p = plan({ cameras, speakers, mics, tablePanels, control, ...extra });
             const { nodes, links } = signalFlow(p, analyze(p));
-            const label = JSON.stringify({ cameras, speakers, mics, tablePanels, control });
+            const label = JSON.stringify({ cameras, speakers, mics, tablePanels, control, ...extra });
             const column = new Map(nodes.map((n) => [n.id, n.column]));
             assert.equal(column.size, nodes.length, `unique ids ${label}`);
             for (const l of links) {
@@ -525,7 +534,7 @@ test('the boardroom is a formal room: bigger table, two displays, ceiling audio'
   assert.equal(room.roomType, 'boardroom');
   assert.equal(room.shape, 'boat');
   assert.equal(room.displays, 2);
-  assert.equal(room.speakers, 'ceiling');
+  assert.equal(room.speakers, 'both', 'wall speakers and ceiling speakers');
   assert.ok(computeLayout(room).fits);
   assert.ok(room.seats >= 8 && room.seats <= 20);
   const small = normalizePlan({ roomType: 'boardroom', seats: 2, length: 3, width: 2 });
@@ -538,7 +547,8 @@ test('the boardroom is a formal room: bigger table, two displays, ceiling audio'
     assert.ok(p.cameras !== 'none');
   }
   assert.equal(applyPreset(room, 'essential').displays, 1);
-  assert.equal(applyPreset(room, 'premium').cameras, 'two');
+  assert.equal(applyPreset(room, 'standard').cameras, 'two');
+  assert.equal(applyPreset(room, 'premium').cameras, 'pairs', 'two cameras on each side of the display');
   assert.equal(applyPreset(room, 'premium').presenter, true);
   assert.ok(planSummary(room, 'x').includes('Boardroom, '));
 });
@@ -595,7 +605,7 @@ test('the workshop is a U with a presenter, the classroom has rows, the round ta
   const round = applyScenario(plan(), 'roundtable');
   assert.equal(round.shape, 'round');
   assert.equal(round.cameras, 'one');
-  assert.equal(applyScenario(plan(), 'boardroom').cameras, 'two');
+  assert.equal(applyScenario(plan(), 'boardroom').cameras, 'pairs');
   assert.equal(applyScenario(plan(), 'boardroom').presenter, true);
   assert.equal(applyScenario(plan(), 'huddle').seats, 4);
 });
@@ -626,7 +636,10 @@ test('a presenter always brings a camera of their own, at the back, aimed at the
       assert.ok(back.hfov < 40, 'zoomed in on the presenter');
       const names = withPresenter.items.map((i) => i.name);
       assert.ok(names.includes('PTZ presenter camera, 20x zoom'), `${roomType} ${cameras}: listed`);
-      assert.ok(names.includes('Wireless presenter microphone'), `${roomType} ${cameras}: microphone listed`);
+      assert.ok(
+        names.includes('Wireless microphones, handheld or lapel (interchangeable)'),
+        `${roomType} ${cameras}: microphone listed`,
+      );
       assert.ok(!without.items.some((i) => i.name.includes('presenter')), `${roomType} ${cameras}: not listed`);
     }
   }
@@ -647,34 +660,45 @@ test('a presenter always brings a camera of their own, at the back, aimed at the
   );
 });
 
-test('ceiling speakers start at the middle package, fewer of them, and the top package covers everything', () => {
+test('ceiling speakers start at the middle package as an even grid, and the top package puts them closer', () => {
   for (const roomType of ['conference', 'boardroom', 'training'] as const) {
     const base = applyRoomType(plan(), roomType);
     const standard = applyPreset(base, 'standard');
     const premium = applyPreset(base, 'premium');
-    assert.equal(standard.speakers, 'ceiling', `${roomType} standard has ceiling speakers`);
-    assert.equal(standard.speakerCoverage, 'partial');
-    assert.equal(premium.speakers, 'ceiling');
-    assert.equal(premium.speakerCoverage, 'full');
+    assert.equal(standard.speakers, 'both', `${roomType} standard has wall and ceiling speakers`);
+    assert.equal(standard.speakerCoverage, 'standard');
+    assert.equal(premium.speakers, 'both');
+    assert.equal(premium.speakerCoverage, 'dense');
     const few = analyze(standard).gear.speakers.length;
     const all = analyze(premium).gear.speakers.length;
     assert.ok(few >= 2, `${roomType}: at least a pair`);
-    assert.ok(few <= all, `${roomType}: ${few} speakers against ${all}`);
+    assert.ok(few < all, `${roomType}: ${few} speakers against ${all}`);
+    assert.equal(
+      analyze(applyPreset(base, 'essential')).gear.speakers.length,
+      0,
+      `${roomType}: none in the first package`,
+    );
   }
+  // a table for eight: four ceiling speakers in the middle package, six in the top one
+  const eight = { roomType: 'conference', length: 8, width: 6, seats: 8, speakers: 'ceiling', mics: 'ceiling' };
+  assert.equal(analyze(plan({ ...eight, speakerCoverage: 'standard' })).gear.speakers.length, 4);
+  assert.equal(analyze(plan({ ...eight, speakerCoverage: 'dense' })).gear.speakers.length, 6);
   for (const [length, width, seats] of [
     [12, 8, 20],
     [10, 8, 16],
     [8, 6, 8],
   ]) {
     const p = { roomType: 'conference', length, width, seats, speakers: 'ceiling', mics: 'ceiling' };
-    const few = analyze(plan({ ...p, speakerCoverage: 'partial' })).gear.speakers.length;
-    const all = analyze(plan({ ...p, speakerCoverage: 'full' })).gear.speakers.length;
-    assert.ok(few >= 2 && few <= all, `${length} x ${width} m: ${few} against ${all}`);
-    if (all >= 6) assert.ok(few < all, `${length} x ${width} m: fewer speakers in a big room`);
+    const few = analyze(plan({ ...p, speakerCoverage: 'standard' })).gear.speakers.length;
+    const all = analyze(plan({ ...p, speakerCoverage: 'dense' })).gear.speakers.length;
+    assert.ok(few >= 2 && few < all, `${length} x ${width} m: ${few} against ${all}`);
   }
-  const items = analyze(applyPreset(plan(), 'standard')).items.find((i) => i.name === 'Ceiling speakers');
-  assert.ok(items?.note?.startsWith('Fewer'));
-  assert.equal(normalizePlan({ speakerCoverage: 'loud' }).speakerCoverage, 'partial');
+  const item = analyze(applyPreset(plan(), 'standard')).items.find((i) => i.name.startsWith('Ceiling speakers'));
+  assert.ok(item?.note?.startsWith('An even grid'));
+  assert.equal(normalizePlan({ speakerCoverage: 'loud' }).speakerCoverage, 'standard');
+  // older links called these a few ceiling speakers and a full set
+  assert.equal(normalizePlan({ speakerCoverage: 'partial' }).speakerCoverage, 'standard');
+  assert.equal(normalizePlan({ speakerCoverage: 'full' }).speakerCoverage, 'dense');
 });
 
 test('a long table gets two microphone arrays, a short one gets one', () => {
@@ -749,8 +773,8 @@ test('the signal flow tells video, audio and control apart, and analog from digi
   const kinds = new Set(['video', 'audio', 'control']);
   const find = (links: ReturnType<typeof signalFlow>['links'], from: string, to: string, signal?: string) =>
     links.find((l) => l.from === from && l.to === to && (!signal || l.signal === signal));
-  for (const speakers of ['none', 'soundbar', 'front', 'ceiling'] as const) {
-    for (const mics of ['none', 'integrated', 'table', 'ceiling'] as const) {
+  for (const speakers of ['none', 'front', 'ceiling', 'both'] as const) {
+    for (const mics of ['none', 'table', 'ceiling', 'pendant', 'gooseneck'] as const) {
       const p = plan({ speakers, mics, presenter: true, cameras: 'two', control: 'wall', tablePanels: true });
       const { links } = signalFlow(p, analyze(p));
       for (const l of links) {
@@ -764,36 +788,39 @@ test('the signal flow tells video, audio and control apart, and analog from digi
       assert.equal(find(links, 'cameras', 'switch')?.signal, 'video');
       assert.equal(find(links, 'switch', 'system', 'control')?.label, 'PTZ control');
       assert.equal(find(links, 'system', 'displays')?.analog, false, 'HDMI is digital');
-      const presenterLink = links.find((l) => l.from === 'presenterMic');
-      assert.equal(presenterLink?.signal, 'audio');
-      assert.equal(presenterLink?.analog, true, 'a wireless receiver gives an analog line');
-      if (mics === 'table')
-        assert.equal(find(links, 'mics', 'processor')?.analog, true, 'table microphones are analog');
-      if (mics === 'ceiling') {
+      const wirelessLink = links.find((l) => l.from === 'wireless');
+      assert.equal(wirelessLink?.signal, 'audio');
+      assert.equal(wirelessLink?.analog, true, 'a wireless receiver gives an analog line');
+      if (mics === 'table' || mics === 'gooseneck')
+        assert.equal(find(links, 'mics', 'processor')?.analog, true, `${mics} microphones are analog`);
+      if (mics === 'ceiling' || mics === 'pendant') {
         assert.equal(find(links, 'mics', 'processor')?.analog, false, 'ceiling arrays are on the network');
         assert.equal(find(links, 'mics', 'switch')?.signal, 'audio');
       }
-      if (speakers === 'front') {
-        const out = find(links, 'processor', 'speakers') ?? find(links, 'system', 'speakers');
-        assert.equal(out?.analog, true, 'wall speakers are fed an analog line');
-      }
-      if (speakers === 'ceiling') assert.equal(find(links, 'processor', 'speakers')?.analog, true);
-      if (speakers === 'soundbar')
-        assert.equal(find(links, 'system', 'speakers')?.analog, false, 'a soundbar is digital');
+      if (speakers === 'front' || speakers === 'both')
+        assert.equal(find(links, 'processor', 'wallSpeakers')?.analog, true, 'wall speakers are fed an analog line');
+      if (speakers === 'ceiling' || speakers === 'both')
+        assert.equal(find(links, 'processor', 'speakers')?.analog, true);
     }
   }
-  // without a presenter there is no presenter microphone, without a control device no control link
+  // without a presenter or wireless microphones there is no receiver, without a control device no control link
   const quiet = plan({
     presenter: false,
     cameras: 'none',
     control: 'none',
     tablePanels: false,
-    mics: 'integrated',
-    speakers: 'soundbar',
+    sharing: 'none',
+    bar: 'large',
+    mics: 'none',
+    speakers: 'none',
+    wireless: 0,
+    dsp: false,
+    engine: false,
   });
   const { nodes, links } = signalFlow(quiet, analyze(quiet));
-  assert.ok(!nodes.some((n) => n.id === 'presenterMic'));
+  assert.ok(!nodes.some((n) => n.id === 'wireless'));
   assert.ok(!links.some((l) => l.signal === 'control'));
+  assert.equal(nodes.find((n) => n.id === 'system')?.title, 'Video bar', 'a bar that runs the platform is the system');
 });
 
 test('the signal flow shows the presenter camera and microphone', () => {
@@ -801,18 +828,23 @@ test('the signal flow shows the presenter camera and microphone', () => {
   const { nodes } = signalFlow(p, analyze(p));
   assert.equal(nodes.find((n) => n.id === 'cameras')?.title, '2× PTZ cameras');
   assert.equal(nodes.find((n) => n.id === 'cameras')?.detail, 'one follows the presenter');
-  assert.ok(nodes.some((n) => n.id === 'presenterMic'));
+  assert.ok(nodes.some((n) => n.id === 'wireless'));
 });
 
 test('a single network device plugs into the room, two or more share a PoE switch', () => {
+  // a video bar is one device with its own cable: no switch, and no separate camera in the flow
   const huddle = applyPreset(applyRoomType(plan(), 'huddle'), 'essential');
   const one = analyze(huddle);
   assert.equal(one.gear.cameras.length, 1);
-  assert.ok(!one.items.some((i) => i.name.startsWith('Network switch')), 'no switch for one camera');
+  assert.ok(!one.items.some((i) => i.name.startsWith('Network switch')), 'no switch for a bar');
   const flow = signalFlow(huddle, one);
-  assert.ok(!flow.nodes.some((n) => n.id === 'switch'));
-  assert.ok(flow.links.some((l) => l.from === 'cameras' && l.to === 'system' && l.signal === 'video'));
-  assert.ok(flow.links.some((l) => l.from === 'cameras' && l.to === 'system' && l.signal === 'control'));
+  assert.ok(!flow.nodes.some((n) => n.id === 'switch' || n.id === 'cameras'));
+  // one PTZ camera plugs straight into the room's network point
+  const single = plan({ cameras: 'one', mics: 'none', speakers: 'front', dsp: false });
+  const alone = signalFlow(single, analyze(single));
+  assert.ok(!alone.nodes.some((n) => n.id === 'switch'));
+  assert.ok(alone.links.some((l) => l.from === 'cameras' && l.to === 'system' && l.signal === 'video'));
+  assert.ok(alone.links.some((l) => l.from === 'cameras' && l.to === 'system' && l.signal === 'control'));
   const team = analyze(applyPreset(plan(), 'standard'));
   assert.ok(
     team.items.some((i) => i.name.startsWith('Network switch')),

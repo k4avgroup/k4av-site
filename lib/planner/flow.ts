@@ -1,4 +1,4 @@
-import { needsSwitch, type Analysis, type Plan, type RoomSystem } from './model.ts';
+import { needsSwitch, ptzCameras, speakerSizeLabel, type Analysis, type Plan, type RoomSystem } from './model.ts';
 
 // Short names, so the titles fit their boxes.
 const systemTitle: Record<RoomSystem, string> = {
@@ -7,6 +7,13 @@ const systemTitle: Record<RoomSystem, string> = {
   zoom: 'Zoom Rooms system',
   webex: 'Webex room system',
   meet: 'Meet room system',
+};
+const platform: Record<RoomSystem, string> = {
+  byod: 'any meeting app, over USB',
+  teams: 'Microsoft Teams Rooms',
+  zoom: 'Zoom Rooms',
+  webex: 'Webex',
+  meet: 'Google Meet',
 };
 
 // A signal flow sketch: what connects to what, with which kind of signal and cable. Cables have no direction here.
@@ -30,14 +37,23 @@ export function signalFlow(plan: Plan, a: Analysis): Flow {
     if (has(from) && has(to)) links.push({ from, to, label, signal, analog });
   };
 
-  if (gear.cameras.length) {
+  // A video bar that runs the meeting platform by itself is the room system; next to a room computer it is a device
+  // of the room, with the camera, microphones and speakers inside it.
+  const barIsSystem = plan.bar !== 'none' && !plan.engine;
+  if (plan.bar !== 'none' && plan.engine) {
+    nodes.push({ id: 'bar', column: 0, title: 'Video bar', detail: 'camera, microphones, speakers' });
+  }
+
+  const ptz = ptzCameras(gear);
+  if (ptz.length) {
     nodes.push({
       id: 'cameras',
       column: 0,
-      title: many(gear.cameras.length, 'PTZ camera'),
+      title: many(ptz.length, 'PTZ camera'),
       detail: plan.presenter ? 'one follows the presenter' : undefined,
     });
   }
+  if (plan.tableCamera) nodes.push({ id: 'tableCamera', column: 0, title: 'Table camera', detail: 'small and round' });
   if (plan.mics === 'ceiling') {
     nodes.push({
       id: 'mics',
@@ -46,16 +62,27 @@ export function signalFlow(plan: Plan, a: Analysis): Flow {
       detail: `${plan.micShape} array`,
     });
   }
-  if (plan.mics === 'table') nodes.push({ id: 'mics', column: 0, title: many(gear.mics.length, 'table microphone') });
-  if (plan.presenter) {
-    nodes.push({ id: 'presenterMic', column: 0, title: 'Wireless presenter mic', detail: 'receiver in the rack' });
+  if (plan.mics === 'pendant') {
+    nodes.push({ id: 'mics', column: 0, title: many(gear.mics.length, 'pendant microphone'), detail: 'on cords' });
   }
-  if (plan.tablePanels) {
+  if (plan.mics === 'table') nodes.push({ id: 'mics', column: 0, title: many(gear.mics.length, 'table microphone') });
+  if (plan.mics === 'gooseneck') {
+    nodes.push({
+      id: 'mics',
+      column: 0,
+      title: many(gear.mics.length, 'gooseneck microphone'),
+      detail: 'conference system',
+    });
+  }
+  if (plan.wireless > 0) {
+    nodes.push({ id: 'wireless', column: 0, title: `${plan.wireless}× wireless mics`, detail: 'receiver in the rack' });
+  }
+  if (plan.sharing === 'cable' || plan.sharing === 'both' || plan.tablePanels) {
     nodes.push({
       id: 'laptops',
       column: 0,
-      title: 'Laptops at the table',
-      detail: many(gear.panels.length, 'connection panel'),
+      title: plan.tablePanels ? 'Laptops at the table' : 'Laptop on a cable',
+      detail: plan.tablePanels ? many(gear.panels.length, 'connection panel') : undefined,
     });
   }
   if (plan.control !== 'none') {
@@ -70,45 +97,83 @@ export function signalFlow(plan: Plan, a: Analysis): Flow {
   // two or more network devices share a PoE switch; a single one plugs into the room's network point
   if (needsSwitch(plan, gear))
     nodes.push({ id: 'switch', column: 1, title: 'PoE network switch', detail: 'power and data' });
-  const processor = plan.mics === 'ceiling' || plan.mics === 'table' || plan.speakers === 'ceiling';
-  if (processor) {
-    nodes.push({ id: 'processor', column: 1, title: 'Audio processor', detail: 'echo control, mixing' });
+  if (plan.dsp) nodes.push({ id: 'processor', column: 1, title: 'Audio processor', detail: 'echo control, mixing' });
+  if (plan.sharing === 'wireless' || plan.sharing === 'both') {
+    nodes.push({ id: 'gateway', column: 1, title: 'Wireless sharing', detail: 'presentation gateway' });
   }
-  nodes.push({ id: 'system', column: 2, title: systemTitle[plan.system] });
+  nodes.push(
+    barIsSystem
+      ? { id: 'system', column: 2, title: 'Video bar', detail: `runs ${platform[plan.system]}` }
+      : {
+          id: 'system',
+          column: 2,
+          title: systemTitle[plan.system],
+          detail: plan.bar !== 'none' ? 'room computer' : undefined,
+        },
+  );
 
-  nodes.push({
-    id: 'displays',
-    column: 3,
-    title: `${displays.count}× ${displays.size}" display${displays.count > 1 ? 's' : ''}`,
-  });
-  if (plan.speakers === 'soundbar') nodes.push({ id: 'speakers', column: 3, title: 'Soundbar' });
-  if (plan.speakers === 'front') nodes.push({ id: 'speakers', column: 3, title: '2× wall speakers' });
-  if (plan.speakers === 'ceiling') {
-    nodes.push({ id: 'speakers', column: 3, title: many(gear.speakers.length, 'ceiling speaker') });
+  const unit = displays.count === 1 ? '' : 's';
+  if (plan.displayType === 'led') {
+    nodes.push({ id: 'displays', column: 3, title: `LED wall, ${displays.size}"` });
+  } else if (plan.displayType === 'projector') {
+    nodes.push({
+      id: 'displays',
+      column: 3,
+      title: `${displays.count}× projector${unit}`,
+      detail: `with ${displays.size}" screen${unit}`,
+    });
+  } else {
+    nodes.push({ id: 'displays', column: 3, title: `${displays.count}× ${displays.size}" display${unit}` });
+  }
+  if (plan.whiteboard) nodes.push({ id: 'whiteboard', column: 3, title: 'Interactive whiteboard' });
+  if (plan.speakers === 'front' || plan.speakers === 'both') {
+    nodes.push({ id: 'wallSpeakers', column: 3, title: '2× wall speakers' });
+  }
+  if (plan.speakers === 'ceiling' || plan.speakers === 'both') {
+    nodes.push({
+      id: 'speakers',
+      column: 3,
+      title: many(gear.speakers.length, 'ceiling speaker'),
+      detail: `${speakerSizeLabel[plan.speakerSize]}, ${plan.speakerMount === 'pendant' ? 'on cords' : 'flush'}`,
+    });
   }
 
+  // a bar next to a room computer hands it the camera and the microphones, and takes the sound back
+  link('bar', 'system', 'USB', 'video');
+  link('bar', 'system', 'USB audio', 'audio');
   // cameras and ceiling microphones are network devices: data and power over one cable
   link('cameras', 'switch', 'PoE', 'video');
-  if (plan.mics === 'ceiling') link('mics', 'switch', 'PoE', 'audio');
+  if (plan.mics === 'ceiling' || plan.mics === 'pendant') link('mics', 'switch', 'PoE', 'audio');
   if (has('cameras')) {
     const via = has('switch') ? 'switch' : 'cameras';
     link(via, 'system', has('switch') ? 'video' : 'USB / net', 'video');
     link(via, 'system', 'PTZ control', 'control');
   }
-  if (processor) {
-    link('mics', 'processor', plan.mics === 'ceiling' ? 'network audio' : 'audio', 'audio', plan.mics === 'table');
-    link('presenterMic', 'processor', 'audio', 'audio', true);
+  link('tableCamera', 'system', 'USB', 'video');
+
+  const networked = plan.mics === 'ceiling' || plan.mics === 'pendant';
+  if (plan.dsp) {
+    link(
+      'mics',
+      'processor',
+      networked ? 'network audio' : 'audio',
+      'audio',
+      plan.mics === 'table' || plan.mics === 'gooseneck',
+    );
+    link('wireless', 'processor', 'audio', 'audio', true);
     link('processor', 'system', 'USB audio', 'audio');
   } else {
-    link('presenterMic', 'system', 'audio', 'audio', true);
+    link('mics', 'system', networked ? 'network audio' : 'audio', 'audio', !networked);
+    link('wireless', 'system', 'audio', 'audio', true);
   }
-  // a soundbar is fed by the room system over USB or HDMI; other speakers hang on the processor, or on the system if
-  // there is none, with an analog line
-  if (plan.speakers === 'soundbar') link('system', 'speakers', 'USB / HDMI', 'audio');
-  else if (processor) link('processor', 'speakers', 'audio', 'audio', true);
-  else link('system', 'speakers', 'audio', 'audio', true);
+  // speakers hang on the processor, or on the room system if there is none, with an analog line
+  const feed = plan.dsp ? 'processor' : 'system';
+  link(feed, 'wallSpeakers', 'audio', 'audio', true);
+  link(feed, 'speakers', 'audio', 'audio', true);
   link('laptops', 'system', 'HDMI / USB-C', 'video');
+  link('gateway', 'displays', 'HDMI', 'video');
   link('touch', 'system', 'USB / net', 'control');
   link('system', 'displays', 'HDMI', 'video');
+  link('system', 'whiteboard', 'HDMI / USB', 'video');
   return { nodes, links };
 }
