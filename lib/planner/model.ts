@@ -11,8 +11,10 @@ export type TableShape = 'rect' | 'boat' | 'round' | 'u';
 export type TablePosition = 'center' | 'back' | 'front';
 export type Speakers = 'none' | 'soundbar' | 'front' | 'ceiling';
 export type Mics = 'none' | 'integrated' | 'table' | 'ceiling';
-export type Cameras = 'none' | 'one' | 'two' | 'three';
-export type CameraSpot = 'above' | 'below';
+export type Cameras = 'none' | 'one' | 'two'; // audience cameras; a presenter always adds a camera of their own
+export type CeilingCoverage = 'partial' | 'full';
+// Where the audience cameras go: one camera above or below the display, two beside it or one above and one below.
+export type CameraSpot = 'above' | 'below' | 'sides' | 'both';
 export type MicShape = 'square' | 'round';
 export type Control = 'none' | 'table' | 'wall';
 export type RoomSystem = 'byod' | 'teams' | 'zoom' | 'webex' | 'meet';
@@ -42,9 +44,10 @@ export type Plan = {
   listeningPlane: boolean;
   mics: Mics;
   micShape: MicShape; // ceiling microphone arrays come square or round
+  speakerCoverage: CeilingCoverage; // ceiling speakers: fewer, or full coverage
   micCoverage: boolean;
   cameras: Cameras;
-  cameraSpot: CameraSpot; // a single camera sits above or below the display
+  cameraSpot: CameraSpot;
   cameraView: boolean;
   tablePanels: boolean;
   control: Control;
@@ -153,7 +156,7 @@ export const rules = {
   viewFactorHigh: 4, // ... and at 4 heights when it does
   speakerHalfAngle: 45, // degrees
   ceilingMicHalfAngle: 55,
-  micArrayEvery: 4.8, // metres of table per ceiling microphone array
+  micArrayEvery: 3.5, // metres of table per ceiling microphone array: a long table gets two
   tableMicEvery: 3, // seats per table microphone
   panelEvery: 2.4, // metres of table per connection panel
   displayBottomOverCamera: 1.4, // a camera under the display sits near seated eye level (1.2 m)
@@ -186,6 +189,7 @@ export const defaultPlan: Plan = {
   listeningPlane: false,
   mics: 'ceiling',
   micShape: 'square',
+  speakerCoverage: 'partial',
   micCoverage: false,
   cameras: 'one',
   cameraSpot: 'above',
@@ -345,12 +349,13 @@ export function normalizePlan(input: Partial<Record<keyof Plan, unknown>> = {}):
   const seats = Math.round(numIn(input.seats, seatLimits(roomType, shape), templates[roomType].seats));
   const length = round2(numIn(input.length, kind.length, templates[roomType].length));
   const width = round2(numIn(input.width, kind.width, templates[roomType].width));
-  const cameras = oneOf(
-    input.cameras === 'four' ? 'three' : input.cameras,
-    ['none', 'one', 'two', 'three'] as const,
-    d.cameras,
-  );
+  const withPresenter = input.cameras === 'three' || input.cameras === 'four'; // old links: two cameras and one at the back
+  const cameras = oneOf(withPresenter ? 'two' : input.cameras, ['none', 'one', 'two'] as const, d.cameras);
   const mics = oneOf(input.mics, ['none', 'integrated', 'table', 'ceiling'] as const, d.mics);
+  // one camera is above or below the display; two are beside it, or one above and one below
+  const wantedSpot = oneOf(input.cameraSpot, ['above', 'below', 'sides', 'both'] as const, d.cameraSpot);
+  const cameraSpot: CameraSpot =
+    cameras === 'two' ? (wantedSpot === 'both' ? 'both' : 'sides') : wantedSpot === 'below' ? 'below' : 'above';
   const control = oneOf(input.control, ['none', 'table', 'wall'] as const, d.control);
   return {
     roomType,
@@ -366,7 +371,7 @@ export function normalizePlan(input: Partial<Record<keyof Plan, unknown>> = {}):
       (roomType === 'conference' || roomType === 'boardroom') && (shape === 'rect' || shape === 'boat')
         ? bool(input.endChairs, d.endChairs)
         : false,
-    presenter: huddle ? false : bool(input.presenter, d.presenter),
+    presenter: huddle ? false : withPresenter || bool(input.presenter, d.presenter),
     presenterX: spot(input.presenterX, ...presenterRange(width, length).x),
     presenterZ: spot(input.presenterZ, ...presenterRange(width, length).z),
     displays: huddle ? 1 : input.displays === 2 ? 2 : 1,
@@ -380,9 +385,10 @@ export function normalizePlan(input: Partial<Record<keyof Plan, unknown>> = {}):
     listeningPlane: bool(input.listeningPlane, d.listeningPlane),
     mics: training && mics === 'table' ? 'ceiling' : mics,
     micShape: oneOf(input.micShape, ['square', 'round'] as const, d.micShape),
+    speakerCoverage: oneOf(input.speakerCoverage, ['partial', 'full'] as const, d.speakerCoverage),
     micCoverage: bool(input.micCoverage, d.micCoverage),
-    cameras: huddle && cameras === 'three' ? 'two' : cameras,
-    cameraSpot: oneOf(input.cameraSpot, ['above', 'below'] as const, d.cameraSpot),
+    cameras,
+    cameraSpot,
     cameraView: bool(input.cameraView, d.cameraView),
     tablePanels: training ? false : bool(input.tablePanels, d.tablePanels),
     control: training && control === 'table' ? 'wall' : control,
@@ -691,7 +697,7 @@ export function computeDisplays(plan: Plan, layout: Layout): DisplayInfo {
   const height = round2(size * 0.01245);
   const width = round2(size * 0.02214);
   const bottomMin =
-    plan.cameras === 'one' && plan.cameraSpot === 'below' ? rules.displayBottomOverCamera : rules.displayBottomMin;
+    plan.cameraSpot === 'below' || plan.cameraSpot === 'both' ? rules.displayBottomOverCamera : rules.displayBottomMin;
   const lo = bottomMin + height / 2;
   const hi = plan.height - 0.25 - height / 2;
   const centerY = round2(Math.min(hi, Math.max(lo, rules.displayCenterHeight)));
@@ -759,7 +765,9 @@ export function computeEquipment(plan: Plan, layout: Layout, d: DisplayInfo): Eq
     const zoneL = Math.min(L - 0.4, t.length + 2.0 + (layout.endChairs ? 1.4 : 0));
     let nx = Math.max(1, Math.ceil(zoneW / spacing));
     if (plan.mics === 'ceiling' && nx % 2 === 1) nx += 1; // no speaker on the centre line, where the microphone array hangs
-    const nz = Math.max(2, Math.ceil(zoneL / spacing));
+    // "partial" is the middle choice: the same layout with every other row left out
+    const full = Math.max(2, Math.ceil(zoneL / spacing));
+    const nz = plan.speakerCoverage === 'partial' ? Math.max(1, Math.ceil(full / 2)) : full;
     for (let i = 0; i < nx; i++) {
       for (let j = 0; j < nz; j++) {
         speakers.push([
@@ -785,18 +793,31 @@ export function computeEquipment(plan: Plan, layout: Layout, d: DisplayInfo): Eq
     micRadius = 4.5;
   }
 
-  // Common PTZ placements: one on the centre line of the display (above it, or below it at eye level),
-  // two beside the display, and a third at the back of the room that follows the presenter.
-  // The front cameras are modelled on the Q-SYS NC-12x80 (12x zoom, 80 degrees at the wide end), the back one on
-  // the NC-20x60 (20x zoom, 60 degrees wide), zoomed in on the presenter.
+  // Common PTZ placements: one on the centre line of the display (above it, or below it at eye level), or two beside
+  // the display. Whenever there is a presenter, a camera of their own is added at the back of the room, aimed at
+  // wherever they stand. The front cameras are modelled on the Q-SYS NC-12x80 (12x zoom, 80 degrees at the wide end),
+  // the presenter camera on the NC-20x60 (20x zoom, 60 degrees wide), zoomed in on the presenter.
   const target: Vec3 = [0, 1.1, t.z];
   const cameras: CameraSpec[] = [];
   const sideY = round2(clamp(d.centerY - 0.2, 1.3, H - 0.3));
   const sideX = round2(Math.min(W / 2 - 0.3, totalW / 2 + (plan.speakers === 'front' ? 0.85 : 0.45)));
+  const above = (): CameraSpec => ({
+    pos: [0, round2(Math.min(H - 0.3, displayTop + 0.22)), frontZ + 0.12],
+    target,
+    hfov: 80,
+    vfov: 50,
+  });
+  const below = (): CameraSpec => ({
+    pos: [0, round2(Math.max(0.6, displayBottom - 0.2)), frontZ + 0.12],
+    target,
+    hfov: 80,
+    vfov: 50,
+  });
   if (plan.cameras === 'one') {
-    const y = plan.cameraSpot === 'below' ? Math.max(0.6, displayBottom - 0.2) : Math.min(H - 0.3, displayTop + 0.22);
-    cameras.push({ pos: [0, round2(y), frontZ + 0.12], target, hfov: 80, vfov: 50 });
-  } else if (plan.cameras === 'two' || plan.cameras === 'three') {
+    cameras.push(plan.cameraSpot === 'below' ? below() : above());
+  } else if (plan.cameras === 'two' && plan.cameraSpot === 'both') {
+    cameras.push(above(), below());
+  } else if (plan.cameras === 'two') {
     for (const sx of [-1, 1]) {
       cameras.push({
         pos: [round2(sx * sideX), sideY, frontZ + 0.12],
@@ -806,7 +827,7 @@ export function computeEquipment(plan: Plan, layout: Layout, d: DisplayInfo): Eq
       });
     }
   }
-  if (plan.cameras === 'three') {
+  if (plan.presenter) {
     const at = presenterSpot(plan, d);
     cameras.push({
       pos: [0, round2(Math.min(H - 0.3, 2.2)), round2(L / 2 - 0.15)],
@@ -846,6 +867,12 @@ export type Analysis = {
   warnings: string[];
 };
 
+// The network devices powered over their cable: the PTZ cameras and the ceiling microphone arrays (the speakers run
+// from the audio processor). One of them plugs straight into the room's network point; two or more need a PoE switch.
+export const poeDevices = (plan: Plan, gear: Equipment) =>
+  (plan.mics === 'ceiling' ? gear.mics.length : 0) + gear.cameras.length;
+export const needsSwitch = (plan: Plan, gear: Equipment) => poeDevices(plan, gear) >= 2;
+
 export function analyze(plan: Plan): Analysis {
   const layout = computeLayout(plan);
   const displays = computeDisplays(plan, layout);
@@ -859,7 +886,16 @@ export function analyze(plan: Plan): Analysis {
   });
   if (plan.speakers === 'soundbar') items.push({ name: 'Soundbar', qty: 1 });
   if (plan.speakers === 'front') items.push({ name: 'Wall speakers beside the display', qty: 2 });
-  if (plan.speakers === 'ceiling') items.push({ name: 'Ceiling speakers', qty: gear.speakers.length });
+  if (plan.speakers === 'ceiling') {
+    items.push({
+      name: 'Ceiling speakers',
+      qty: gear.speakers.length,
+      note:
+        plan.speakerCoverage === 'full'
+          ? 'Even sound across the whole seating area.'
+          : 'Fewer speakers: the main seating area.',
+    });
+  }
   if (plan.mics === 'ceiling')
     items.push({
       name:
@@ -870,25 +906,29 @@ export function analyze(plan: Plan): Analysis {
     });
   if (plan.mics === 'table') items.push({ name: 'Table microphones', qty: gear.mics.length });
   if (plan.mics === 'integrated') items.push({ name: 'Microphones built into the bar or camera', qty: 1 });
-  const ceilingDevices =
-    (plan.speakers === 'ceiling' ? gear.speakers.length : 0) + (plan.mics === 'ceiling' ? gear.mics.length : 0);
   if (plan.mics === 'ceiling' || plan.mics === 'table' || plan.speakers === 'ceiling') {
     items.push({ name: 'Audio processor (echo cancellation and mixing)', qty: 1 });
   }
-  if (ceilingDevices + gear.cameras.length > 0)
+  if (needsSwitch(plan, gear))
     items.push({
       name: 'Network switch with PoE',
       qty: 1,
-      note: 'Powers the ceiling devices and the PTZ cameras over one cable each.',
+      note: 'Powers the ceiling microphones and the PTZ cameras over one cable each.',
     });
   if (plan.cameras === 'one') items.push({ name: 'PTZ camera, 12x zoom, 80° wide view', qty: 1 });
   if (plan.cameras === 'two') items.push({ name: 'PTZ cameras, 12x zoom, with automatic switching', qty: 2 });
-  if (plan.cameras === 'three')
+  if (plan.presenter) {
     items.push({
-      name: 'PTZ cameras with automatic switching',
-      qty: 3,
-      note: 'Two beside the display (12x zoom, 80° wide view) and one at the back (20x zoom) that follows the presenter.',
+      name: 'PTZ presenter camera, 20x zoom',
+      qty: 1,
+      note: 'At the back of the room; it follows the presenter.',
     });
+    items.push({
+      name: 'Wireless presenter microphone',
+      qty: 1,
+      note: 'Handheld or lapel, with a receiver at the rack.',
+    });
+  }
   if (gear.panels.length) items.push({ name: 'Table connection panel', qty: gear.panels.length });
   if (plan.control === 'table') items.push({ name: 'Touch panel on the table', qty: 1 });
   if (plan.control === 'wall') items.push({ name: 'Touch panel on the wall', qty: 1 });
@@ -910,9 +950,9 @@ export function analyze(plan: Plan): Analysis {
   }
   if (plan.system !== 'byod' && plan.mics === 'none')
     warnings.push('A room system is selected but there are no microphones: the far end will not hear the room.');
-  if (plan.system !== 'byod' && plan.cameras === 'none')
+  if (plan.system !== 'byod' && gear.cameras.length === 0)
     warnings.push('A room system is selected but there is no camera: the far end will not see the room.');
-  if (plan.cameras !== 'none' && plan.mics === 'none')
+  if (gear.cameras.length > 0 && plan.mics === 'none')
     warnings.push('A camera without microphones: remote people will see the room but not hear it.');
   if (plan.speakers === 'none') warnings.push('No speakers: people in the room will not hear remote participants.');
   return { layout, displays, gear, items, warnings };
@@ -920,13 +960,15 @@ export function analyze(plan: Plan): Analysis {
 
 // ---------------------------------------------------------------- packages as starting points
 
-// What each package adds to a room, for each kind of room.
+// What each package adds to a room, for each kind of room. Ceiling speakers start at the middle package, in a smaller
+// number ("partial"); the top package gives full coverage. A presenter always gets a camera of their own.
 const presetChoices: Record<RoomType, Record<Preset, Partial<Plan>>> = {
   boardroom: {
     essential: { displays: 1, speakers: 'front', mics: 'ceiling', cameras: 'two', tablePanels: true, control: 'table' },
     standard: {
       displays: 2,
       speakers: 'ceiling',
+      speakerCoverage: 'partial',
       mics: 'ceiling',
       cameras: 'two',
       tablePanels: true,
@@ -935,8 +977,9 @@ const presetChoices: Record<RoomType, Record<Preset, Partial<Plan>>> = {
     premium: {
       displays: 2,
       speakers: 'ceiling',
+      speakerCoverage: 'full',
       mics: 'ceiling',
-      cameras: 'three',
+      cameras: 'two',
       tablePanels: true,
       control: 'table',
       presenter: true,
@@ -958,7 +1001,8 @@ const presetChoices: Record<RoomType, Record<Preset, Partial<Plan>>> = {
     },
     standard: {
       displays: 1,
-      speakers: 'front',
+      speakers: 'ceiling',
+      speakerCoverage: 'partial',
       mics: 'ceiling',
       cameras: 'two',
       tablePanels: true,
@@ -967,24 +1011,41 @@ const presetChoices: Record<RoomType, Record<Preset, Partial<Plan>>> = {
     premium: {
       displays: 2,
       speakers: 'ceiling',
+      speakerCoverage: 'full',
       mics: 'ceiling',
-      cameras: 'three',
+      cameras: 'two',
       tablePanels: true,
       control: 'table',
+      presenter: true,
     },
   },
   training: {
     essential: { displays: 1, speakers: 'front', mics: 'integrated', cameras: 'one', control: 'none' },
-    standard: { displays: 1, speakers: 'front', mics: 'ceiling', cameras: 'two', control: 'wall' },
-    premium: { displays: 2, speakers: 'ceiling', mics: 'ceiling', cameras: 'three', control: 'wall', presenter: true },
+    standard: {
+      displays: 1,
+      speakers: 'ceiling',
+      speakerCoverage: 'partial',
+      mics: 'ceiling',
+      cameras: 'two',
+      control: 'wall',
+    },
+    premium: {
+      displays: 2,
+      speakers: 'ceiling',
+      speakerCoverage: 'full',
+      mics: 'ceiling',
+      cameras: 'two',
+      control: 'wall',
+      presenter: true,
+    },
   },
 };
 
 export const presetText: Record<RoomType, Record<Preset, string>> = {
   boardroom: {
     essential: 'One display, wall speakers, ceiling microphones, two PTZ cameras',
-    standard: 'Two displays, ceiling audio, two PTZ cameras, table touch panel',
-    premium: 'Two displays, ceiling audio, three PTZ cameras that follow the presenter, table panels',
+    standard: 'Two displays, some ceiling speakers, ceiling microphones, two PTZ cameras, table touch panel',
+    premium: 'Two displays, full ceiling audio, two PTZ cameras and a presenter camera, table panels',
   },
   huddle: {
     essential: 'Soundbar with built-in microphones and one PTZ camera',
@@ -993,13 +1054,13 @@ export const presetText: Record<RoomType, Record<Preset, string>> = {
   },
   conference: {
     essential: 'Soundbar, built-in microphones, one PTZ camera',
-    standard: 'Wall speakers, ceiling microphones, two PTZ cameras, touch panel',
-    premium: 'Two displays, ceiling audio, three PTZ cameras, touch panel',
+    standard: 'Some ceiling speakers, ceiling microphones, two PTZ cameras, touch panel',
+    premium: 'Two displays, full ceiling audio, two PTZ cameras and a presenter camera, touch panel',
   },
   training: {
-    essential: 'Wall speakers, built-in microphones, one PTZ camera',
-    standard: 'Wall speakers, ceiling microphones, two PTZ cameras, wall touch panel',
-    premium: 'Two displays, ceiling audio, three PTZ cameras that follow the presenter, wall touch panel',
+    essential: 'Wall speakers, built-in microphones, one PTZ camera and a presenter camera',
+    standard: 'Some ceiling speakers, ceiling microphones, two PTZ cameras and a presenter camera, wall touch panel',
+    premium: 'Two displays, full ceiling audio, two PTZ cameras and a presenter camera, wall touch panel',
   },
 };
 
@@ -1039,7 +1100,7 @@ export const scenarios: Scenario[] = [
   {
     id: 'team',
     label: 'Team room for eight',
-    about: 'A rectangular table, wall speakers, ceiling microphones, two PTZ cameras and a touch panel.',
+    about: 'A rectangular table, some ceiling speakers, ceiling microphones, two PTZ cameras and a touch panel.',
     type: 'conference',
     preset: 'standard',
     changes: {},
@@ -1055,7 +1116,7 @@ export const scenarios: Scenario[] = [
   {
     id: 'boardroom',
     label: 'Boardroom for twelve',
-    about: 'A boat-shaped table, two displays, ceiling audio and three PTZ cameras, one following the presenter.',
+    about: 'A boat-shaped table, two displays, full ceiling audio, two PTZ cameras and a presenter camera.',
     type: 'boardroom',
     preset: 'premium',
     changes: { seats: 12 },
@@ -1063,7 +1124,8 @@ export const scenarios: Scenario[] = [
   {
     id: 'classroom',
     label: 'Classroom for eighteen',
-    about: 'Three rows of two-seat desks facing the display, two PTZ cameras and a touch panel on the wall.',
+    about:
+      'Three rows of two-seat desks facing the display, two PTZ cameras and a presenter camera, a touch panel on the wall.',
     type: 'training',
     preset: 'standard',
     changes: { seats: 18 },
@@ -1071,7 +1133,7 @@ export const scenarios: Scenario[] = [
   {
     id: 'workshop',
     label: 'Workshop in a U',
-    about: 'Tables in a U, open towards the display, so the presenter can walk in the middle.',
+    about: 'Tables in a U, open towards the display, so the presenter can walk in the middle; a camera follows them.',
     type: 'conference',
     preset: 'standard',
     changes: { shape: 'u', seats: 14, length: 8, width: 8, presenter: true },
@@ -1116,6 +1178,7 @@ const KEYS = [
   'cameraSpot',
   'micShape',
   'roomType',
+  'speakerCoverage',
 ] as const satisfies readonly (keyof Plan)[];
 
 export function encodePlan(plan: Plan): string {

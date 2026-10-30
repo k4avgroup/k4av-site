@@ -1,4 +1,4 @@
-import type { Analysis, Plan, RoomSystem } from './model.ts';
+import { needsSwitch, type Analysis, type Plan, type RoomSystem } from './model.ts';
 
 // Short names, so the titles fit their boxes.
 const systemTitle: Record<RoomSystem, string> = {
@@ -9,10 +9,14 @@ const systemTitle: Record<RoomSystem, string> = {
   meet: 'Meet room system',
 };
 
-// A signal flow sketch: what connects to what, and with which kind of cable. Cables have no direction here.
+// A signal flow sketch: what connects to what, with which kind of signal and cable. Cables have no direction here.
+// Colour tells what travels (video, audio, control); a dashed line is analog, a solid one is digital or network.
+export type Signal = 'video' | 'audio' | 'control';
 export type FlowNode = { id: string; column: 0 | 1 | 2 | 3; title: string; detail?: string };
-export type FlowLink = { from: string; to: string; label: string };
+export type FlowLink = { from: string; to: string; label: string; signal: Signal; analog: boolean };
 export type Flow = { nodes: FlowNode[]; links: FlowLink[] };
+
+export const signalNames: Record<Signal, string> = { video: 'Video', audio: 'Audio', control: 'Control' };
 
 const many = (n: number, word: string) => `${n}× ${word}${n > 1 ? 's' : ''}`;
 
@@ -22,12 +26,17 @@ export function signalFlow(plan: Plan, a: Analysis): Flow {
   const nodes: FlowNode[] = [];
   const links: FlowLink[] = [];
   const has = (id: string) => nodes.some((n) => n.id === id);
-  const link = (from: string, to: string, label: string) => {
-    if (has(from) && has(to)) links.push({ from, to, label });
+  const link = (from: string, to: string, label: string, signal: Signal, analog = false) => {
+    if (has(from) && has(to)) links.push({ from, to, label, signal, analog });
   };
 
   if (gear.cameras.length) {
-    nodes.push({ id: 'cameras', column: 0, title: many(gear.cameras.length, 'PTZ camera') });
+    nodes.push({
+      id: 'cameras',
+      column: 0,
+      title: many(gear.cameras.length, 'PTZ camera'),
+      detail: plan.presenter ? 'one follows the presenter' : undefined,
+    });
   }
   if (plan.mics === 'ceiling') {
     nodes.push({
@@ -38,6 +47,9 @@ export function signalFlow(plan: Plan, a: Analysis): Flow {
     });
   }
   if (plan.mics === 'table') nodes.push({ id: 'mics', column: 0, title: many(gear.mics.length, 'table microphone') });
+  if (plan.presenter) {
+    nodes.push({ id: 'presenterMic', column: 0, title: 'Wireless presenter mic', detail: 'receiver in the rack' });
+  }
   if (plan.tablePanels) {
     nodes.push({
       id: 'laptops',
@@ -55,11 +67,9 @@ export function signalFlow(plan: Plan, a: Analysis): Flow {
     });
   }
 
-  const ceilingDevices =
-    (plan.speakers === 'ceiling' ? gear.speakers.length : 0) + (plan.mics === 'ceiling' ? gear.mics.length : 0);
-  if (gear.cameras.length + ceilingDevices > 0) {
+  // two or more network devices share a PoE switch; a single one plugs into the room's network point
+  if (needsSwitch(plan, gear))
     nodes.push({ id: 'switch', column: 1, title: 'PoE network switch', detail: 'power and data' });
-  }
   const processor = plan.mics === 'ceiling' || plan.mics === 'table' || plan.speakers === 'ceiling';
   if (processor) {
     nodes.push({ id: 'processor', column: 1, title: 'Audio processor', detail: 'echo control, mixing' });
@@ -77,20 +87,28 @@ export function signalFlow(plan: Plan, a: Analysis): Flow {
     nodes.push({ id: 'speakers', column: 3, title: many(gear.speakers.length, 'ceiling speaker') });
   }
 
-  link('cameras', 'switch', 'PoE');
-  if (plan.mics === 'ceiling') link('mics', 'switch', 'PoE');
-  if (has('cameras')) link('switch', 'system', 'video');
-  if (plan.speakers === 'ceiling') link('switch', 'speakers', 'PoE');
-  if (processor) {
-    link('mics', 'processor', 'audio');
-    link('processor', 'system', 'USB audio');
-    link('processor', 'speakers', 'audio');
-  } else {
-    link('mics', 'system', 'audio');
-    link('system', 'speakers', 'audio');
+  // cameras and ceiling microphones are network devices: data and power over one cable
+  link('cameras', 'switch', 'PoE', 'video');
+  if (plan.mics === 'ceiling') link('mics', 'switch', 'PoE', 'audio');
+  if (has('cameras')) {
+    const via = has('switch') ? 'switch' : 'cameras';
+    link(via, 'system', has('switch') ? 'video' : 'USB / net', 'video');
+    link(via, 'system', 'PTZ control', 'control');
   }
-  link('laptops', 'system', 'HDMI / USB-C');
-  link('touch', 'system', 'USB / net');
-  link('system', 'displays', 'HDMI');
+  if (processor) {
+    link('mics', 'processor', plan.mics === 'ceiling' ? 'network audio' : 'audio', 'audio', plan.mics === 'table');
+    link('presenterMic', 'processor', 'audio', 'audio', true);
+    link('processor', 'system', 'USB audio', 'audio');
+  } else {
+    link('presenterMic', 'system', 'audio', 'audio', true);
+  }
+  // a soundbar is fed by the room system over USB or HDMI; other speakers hang on the processor, or on the system if
+  // there is none, with an analog line
+  if (plan.speakers === 'soundbar') link('system', 'speakers', 'USB / HDMI', 'audio');
+  else if (processor) link('processor', 'speakers', 'audio', 'audio', true);
+  else link('system', 'speakers', 'audio', 'audio', true);
+  link('laptops', 'system', 'HDMI / USB-C', 'video');
+  link('touch', 'system', 'USB / net', 'control');
+  link('system', 'displays', 'HDMI', 'video');
   return { nodes, links };
 }

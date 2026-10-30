@@ -374,7 +374,8 @@ export default function RoomPlanner() {
               )}
               {plan.presenter && plan.roomType !== 'huddle' && (
                 <p className="planner-hint">
-                  Drag the presenter in the 3D view to move them.{' '}
+                  Drag the presenter in the 3D view to move them. A camera at the back of the room follows them, and
+                  they get a wireless microphone.{' '}
                   {(plan.presenterX !== null || plan.presenterZ !== null) && (
                     <button
                       type="button"
@@ -459,6 +460,17 @@ export default function RoomPlanner() {
                 ]}
                 onChange={(v) => set('speakers', v)}
               />
+              {plan.speakers === 'ceiling' && (
+                <Seg
+                  label="Ceiling speakers"
+                  value={plan.speakerCoverage}
+                  options={[
+                    { value: 'partial', label: 'Fewer' },
+                    { value: 'full', label: 'Full coverage' },
+                  ]}
+                  onChange={(v) => set('speakerCoverage', v)}
+                />
+              )}
               <Check
                 label="Show where the sound reaches"
                 checked={plan.speakerCones}
@@ -498,7 +510,8 @@ export default function RoomPlanner() {
                 onChange={(v) => set('micCoverage', v)}
               />
               <p className="planner-hint">
-                {plan.speakers === 'ceiling' && `${gear.speakers.length} ceiling speakers. `}
+                {plan.speakers === 'ceiling' &&
+                  `${gear.speakers.length} ceiling speakers, ${plan.speakerCoverage === 'full' ? 'even coverage of the seating area' : 'fewer, for the main seating area'}. `}
                 {plan.mics === 'ceiling' &&
                   `${gear.mics.length} microphone array${gear.mics.length > 1 ? 's' : ''}, ${plan.micShape === 'round' ? 'round 25 in (635 mm)' : 'square 24 in (604 mm)'}, sized like the Shure MXA920. `}
                 {plan.mics === 'table' && `${gear.mics.length} table microphones. `}
@@ -511,13 +524,12 @@ export default function RoomPlanner() {
             <>
               <h2>Video</h2>
               <Seg
-                label="PTZ cameras"
+                label="Audience cameras"
                 value={plan.cameras}
                 options={[
                   { value: 'none', label: 'None' },
                   { value: 'one', label: 'One' },
                   { value: 'two', label: 'Two' },
-                  ...(plan.roomType === 'huddle' ? [] : [{ value: 'three' as const, label: 'Three' }]),
                 ]}
                 onChange={(v) => set('cameras', v)}
               />
@@ -532,22 +544,35 @@ export default function RoomPlanner() {
                   onChange={(v) => set('cameraSpot', v)}
                 />
               )}
+              {plan.cameras === 'two' && (
+                <Seg
+                  label="Camera positions"
+                  value={plan.cameraSpot}
+                  options={[
+                    { value: 'sides', label: 'Either side of the display' },
+                    { value: 'both', label: 'Above and below the display' },
+                  ]}
+                  onChange={(v) => set('cameraSpot', v)}
+                />
+              )}
               <Check
                 label="Show what the cameras see"
                 checked={plan.cameraView}
                 onChange={(v) => set('cameraView', v)}
               />
               <p className="planner-hint">
-                {plan.cameras === 'none' && 'No camera: the room is not seen by remote people.'}
+                {plan.cameras === 'none' && 'No audience camera: remote people do not see the room.'}
                 {plan.cameras === 'one' &&
                   (plan.cameraSpot === 'above'
                     ? 'One PTZ camera on the centre line above the display: the usual choice, and it works for most rooms.'
                     : 'One PTZ camera on the centre line below the display, close to seated eye level. The display is mounted higher to make room for it.')}
                 {plan.cameras === 'two' &&
-                  'Two PTZ cameras on both sides of the display, aimed across the table so the system can pick the face-on view of whoever speaks.'}
-                {plan.cameras === 'three' &&
-                  'Two PTZ cameras beside the display and a third at the back of the room that follows the presenter. Show a presenter on the Layout step and drag them to see the camera turn.'}
-                {plan.cameras !== 'none' && ' Sized like the Q-SYS NC-12x80: 170 × 201 × 142 mm.'}{' '}
+                  (plan.cameraSpot === 'both'
+                    ? 'Two PTZ cameras on the centre line, one above the display and one below it, close to seated eye level. The display is mounted higher.'
+                    : 'Two PTZ cameras on both sides of the display, aimed across the table so the system can pick the face-on view of whoever speaks.')}
+                {plan.cameras !== 'none' && ' Sized like the Q-SYS NC-12x80: 170 × 201 × 142 mm.'}
+                {plan.presenter &&
+                  ' The presenter has a camera of their own at the back of the room, added automatically; it follows them.'}
               </p>
             </>
           )}

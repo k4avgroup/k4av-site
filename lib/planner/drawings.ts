@@ -205,9 +205,14 @@ function planBase(plan: Plan, a: Analysis, ceiling: boolean, opts: DrawingOption
   g.dim(X(-W / 2), Y(-L / 2), X(-W / 2), Y(L / 2), 30, formatLength(L, plan.unit));
 
   // wall devices: cameras with what they see, and the control panel
+  // two cameras on the same spot of the plan (one above the display, one below) are drawn side by side
+  const stacked = new Map<string, number>();
   gear.cameras.forEach((cam, i) => {
     if (!ceiling) wedge(g, plan, cam, X, Y);
-    const cx = X(cam.pos[0]);
+    const key = `${cam.pos[0]},${cam.pos[2]}`;
+    const nth = stacked.get(key) ?? 0;
+    stacked.set(key, nth + 1);
+    const cx = X(cam.pos[0]) + nth * 13;
     const cy = Y(cam.pos[2]);
     g.rect(cx - 5, cy - 5, 10, 10, 'camera', 2);
     g.text(cx, cy - 9, `C${i + 1}`, 'small');
@@ -371,14 +376,23 @@ export function displayWall(plan: Plan, a: Analysis, opts: DrawingOptions = {}):
   const onWall = gear.cameras.filter((c) => c.pos[2] < 0);
   onWall.forEach((cam, i) => {
     g.rect(X(cam.pos[0]) - 0.085 * s, Y(cam.pos[1]) - 0.1 * s, 0.17 * s, 0.2 * s, 'camera', 2);
-    g.text(X(cam.pos[0]), Y(cam.pos[1]) - 0.1 * s - 5, `C${i + 1}`, 'small');
+    // the label of a camera below the display goes under it, not onto the screen
+    const below = cam.pos[1] < bottom;
+    g.text(X(cam.pos[0]), Y(cam.pos[1]) + (below ? 0.1 * s + 12 : -0.1 * s - 5), `C${i + 1}`, 'small');
   });
 
   // heights above the floor, stacked on the left; widths along the top
   g.dim(X(-W / 2), Y(H), X(W / 2), Y(H), -26, formatLength(W, unit));
   g.dim(X(-W / 2), Y(H), X(-W / 2), Y(0), 30, formatLength(H, unit));
   const span = displays.count === 2 ? 2 * displays.width + 0.12 : displays.width;
-  g.dim(X(-span / 2), Y(bottom), X(span / 2), Y(bottom), 24, formatLength(span, unit));
+  g.dim(
+    X(-span / 2),
+    Y(bottom),
+    X(span / 2),
+    Y(bottom),
+    onWall.some((c) => c.pos[1] < bottom) ? 46 : 24,
+    formatLength(span, unit),
+  );
   g.dim(X(W / 2), Y(bottom), X(W / 2), Y(0), -30, `bottom ${formatLength(bottom, unit)}`);
   g.dim(X(W / 2), Y(top), X(W / 2), Y(0), -64, `top ${formatLength(top, unit)}`);
   unique(onWall.map((c) => c.pos[1])).forEach((y, i) => {

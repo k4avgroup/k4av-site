@@ -442,11 +442,30 @@
   min-width: 620px;
   height: auto;
 }
-.planner-flow path {
+/* colour says what travels, a dashed line is analog and a solid one digital or network */
+.planner-flow .flow-link {
   fill: none;
-  stroke: #5b8def;
-  stroke-opacity: 0.6;
-  stroke-width: 1.5;
+  stroke-width: 2;
+  stroke-opacity: 0.9;
+}
+.planner-flow .flow-link[data-analog] {
+  stroke-dasharray: 7 5;
+}
+.planner-flow .flow-video {
+  stroke: #6aa5ff;
+}
+.planner-flow .flow-audio {
+  stroke: #3ddc84;
+}
+.planner-flow .flow-control {
+  stroke: #ffb703;
+}
+.planner-flow .flow-neutral {
+  stroke: #98a4b3;
+}
+.planner-flow .flow-rule {
+  stroke: #3b4654;
+  stroke-width: 1;
 }
 .planner-flow .flow-box {
   fill: #1d242d;
