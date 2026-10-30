@@ -4,6 +4,7 @@ import {
   analyze,
   applyPreset,
   applyRoomType,
+  applyScenario,
   computeLayout,
   decodePlan,
   defaultPlan,
@@ -17,6 +18,7 @@ import {
   presetText,
   roomTypes,
   rules,
+  scenarios,
   seatLimits,
   tableShapes,
   toUnit,
@@ -248,6 +250,11 @@ export default function RoomPlanner() {
   };
 
   const shapes = roomTypes[plan.roomType].shapes;
+  // the ready-made room this plan still is, if it has not been changed since
+  const ready = useMemo(
+    () => scenarios.find((s) => encodePlan(applyScenario(plan, s.id)) === encodePlan(plan)),
+    [plan],
+  );
   const [minSeats, maxSeats] = seatLimits(plan.roomType, plan.shape);
 
   return (
@@ -273,6 +280,24 @@ export default function RoomPlanner() {
           {step === 0 && (
             <>
               <h2>Your room</h2>
+              <div className="planner-field">
+                <span className="planner-label">Start from a ready-made room</span>
+                <div className="planner-scenarios" role="group" aria-label="Ready-made rooms">
+                  {scenarios.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      aria-pressed={ready?.id === s.id}
+                      onClick={() => setPlan((cur) => applyScenario(cur, s.id))}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="planner-hint">
+                  {ready ? ready.about : 'Pick one to start. Everything can be changed afterwards.'}
+                </p>
+              </div>
               <Seg
                 label="Kind of room"
                 value={plan.roomType}

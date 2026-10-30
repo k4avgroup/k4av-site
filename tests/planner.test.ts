@@ -4,6 +4,7 @@ import {
   analyze,
   applyPreset,
   applyRoomType,
+  applyScenario,
   computeLayout,
   decodePlan,
   defaultPlan,
@@ -16,6 +17,7 @@ import {
   presenterSpot,
   presetText,
   rules,
+  scenarios,
   tableShapes,
   tableSize,
   templates,
@@ -549,4 +551,62 @@ test('the table shape travels in the link', () => {
   }
   assert.ok(planSummary(plan({ shape: 'u', seats: 12 }), 'x').includes('U-shaped table'));
   assert.ok(planSummary(plan({ shape: 'boat', seats: 12 }), 'x').includes('boat-shaped table'));
+});
+
+test('every ready-made room is complete, fits, and raises no warnings', () => {
+  const ids = scenarios.map((s) => s.id);
+  assert.equal(new Set(ids).size, ids.length, 'unique ids');
+  assert.ok(scenarios.length >= 6);
+  for (const s of scenarios) {
+    assert.ok(s.label.length > 0 && s.about.length > 20, s.id);
+    const p = applyScenario(plan(), s.id);
+    const a = analyze(p);
+    assert.equal(p.roomType, s.type, s.id);
+    assert.equal(a.layout.fits, true, `${s.id} fits its room`);
+    assert.deepEqual(a.warnings, [], `${s.id} has nothing to check`);
+    assert.ok(a.gear.cameras.length >= 1 && a.items.length >= 5, s.id);
+    for (const [key, value] of Object.entries(s.changes)) {
+      assert.deepEqual(p[key as keyof typeof p], value, `${s.id}: ${key}`);
+    }
+  }
+});
+
+test('a ready-made room keeps what is personal and replaces what belongs to the room', () => {
+  const mine = plan({ unit: 'ft', system: 'zoom', ceiling: false, micShape: 'round', readability: 0.9 });
+  for (const s of scenarios) {
+    const p = applyScenario({ ...mine, cameraView: true, presenterX: 1, presenterZ: 1, displaySize: 98 }, s.id);
+    assert.equal(p.unit, 'ft', s.id);
+    assert.equal(p.system, 'zoom', s.id);
+    assert.equal(p.ceiling, false, s.id);
+    assert.equal(p.micShape, 'round', s.id);
+    assert.equal(p.cameraView, false, `${s.id}: overlays start off`);
+    assert.equal(p.presenterX, null, `${s.id}: the presenter starts at the display`);
+    assert.equal(p.displaySize, null, `${s.id}: the display size is recommended again`);
+  }
+});
+
+test('the workshop is a U with a presenter, the classroom has rows, the round table is round', () => {
+  const workshop = applyScenario(plan(), 'workshop');
+  assert.equal(workshop.shape, 'u');
+  assert.equal(workshop.presenter, true);
+  assert.equal(computeLayout(workshop).tables.length, 3);
+  const classroom = applyScenario(plan(), 'classroom');
+  assert.equal(classroom.roomType, 'training');
+  assert.ok((computeLayout(classroom).rows?.count ?? 0) >= 2);
+  const round = applyScenario(plan(), 'roundtable');
+  assert.equal(round.shape, 'round');
+  assert.equal(round.cameras, 'one');
+  assert.equal(applyScenario(plan(), 'boardroom').cameras, 'three');
+  assert.equal(applyScenario(plan(), 'huddle').seats, 4);
+});
+
+test('a plan is recognised as a ready-made room until it is changed', () => {
+  const same = (id: (typeof scenarios)[number]['id'], p: ReturnType<typeof plan>) =>
+    encodePlan(applyScenario(p, id)) === encodePlan(p);
+  for (const s of scenarios) {
+    const p = applyScenario(plan(), s.id);
+    assert.equal(same(s.id, p), true, `${s.id} is itself`);
+    assert.equal(same(s.id, normalizePlan({ ...p, seats: p.seats + 1 })), false, `${s.id} with another seat`);
+  }
+  assert.equal(scenarios.filter((s) => same(s.id, applyScenario(plan(), 'team'))).length, 1);
 });

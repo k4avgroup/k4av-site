@@ -1,7 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildDrawings, roomLabel, type Prim } from '../lib/planner/drawings.ts';
-import { analyze, applyPreset, applyRoomType, defaultPlan, normalizePlan, roomTypes } from '../lib/planner/model.ts';
+import {
+  analyze,
+  applyPreset,
+  applyRoomType,
+  applyScenario,
+  defaultPlan,
+  normalizePlan,
+  roomTypes,
+  scenarios,
+} from '../lib/planner/model.ts';
 import {
   buildSheet,
   imperialScales,
@@ -113,5 +122,17 @@ test('drawings for a sheet leave out the lines the title block carries', () => {
     assert.ok(!texts(bare[i]).some((t) => t.includes('Indicative sketch')));
     assert.ok(!texts(bare[i]).includes(roomLabel(base)));
     assert.ok(bare[i].height < full[i].height);
+  }
+});
+
+test('every ready-made room prints on one sheet at a sensible scale', () => {
+  for (const unit of ['m', 'ft'] as const) {
+    for (const s of scenarios) {
+      const p = applyScenario(normalizePlan({ ...base, unit }), s.id);
+      const sheet = buildSheet(p, analyze(p), today);
+      assert.equal(sheet.fits, true, `${unit} ${s.id}`);
+      const largest = unit === 'm' ? 100 : 96;
+      assert.ok(sheet.scale.ratio <= largest, `${unit} ${s.id}: ${sheet.scale.label} is not too small to read`);
+    }
   }
 });

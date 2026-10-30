@@ -196,6 +196,30 @@
   text-decoration: underline;
   cursor: pointer;
 }
+.planner-scenarios {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.planner-scenarios button {
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--type-small);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.planner-scenarios button:hover {
+  border-color: var(--accent);
+}
+.planner-scenarios button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
 .planner-presets {
   display: grid;
   gap: 8px;

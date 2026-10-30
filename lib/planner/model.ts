@@ -1014,6 +1014,77 @@ export function applyPreset(plan: Plan, preset: Preset): Plan {
     ...presetChoices[plan.roomType][preset],
   });
 }
+// ---------------------------------------------------------------- ready-made rooms
+
+export type ScenarioId = 'huddle' | 'team' | 'boardroom' | 'classroom' | 'workshop' | 'roundtable';
+export type Scenario = {
+  id: ScenarioId;
+  label: string;
+  about: string;
+  type: RoomType;
+  preset: Preset;
+  changes: Partial<Plan>; // what sets this room apart from its kind of room
+};
+
+// Typical rooms to start from: a kind of room, a package and the few things that make this one what it is.
+export const scenarios: Scenario[] = [
+  {
+    id: 'huddle',
+    label: 'Huddle for four',
+    about: 'A small room with a video bar: soundbar, built-in microphones and one PTZ camera.',
+    type: 'huddle',
+    preset: 'essential',
+    changes: {},
+  },
+  {
+    id: 'team',
+    label: 'Team room for eight',
+    about: 'A rectangular table, wall speakers, ceiling microphones, two PTZ cameras and a touch panel.',
+    type: 'conference',
+    preset: 'standard',
+    changes: {},
+  },
+  {
+    id: 'roundtable',
+    label: 'Round table for eight',
+    about: 'Everyone equal around a round table, with one PTZ camera above the display.',
+    type: 'conference',
+    preset: 'standard',
+    changes: { shape: 'round', seats: 8, length: 6, width: 6, cameras: 'one' },
+  },
+  {
+    id: 'boardroom',
+    label: 'Boardroom for twelve',
+    about: 'A boat-shaped table, two displays, ceiling audio and three PTZ cameras, one following the presenter.',
+    type: 'boardroom',
+    preset: 'premium',
+    changes: { seats: 12 },
+  },
+  {
+    id: 'classroom',
+    label: 'Classroom for eighteen',
+    about: 'Three rows of two-seat desks facing the display, two PTZ cameras and a touch panel on the wall.',
+    type: 'training',
+    preset: 'standard',
+    changes: { seats: 18 },
+  },
+  {
+    id: 'workshop',
+    label: 'Workshop in a U',
+    about: 'Tables in a U, open towards the display, so the presenter can walk in the middle.',
+    type: 'conference',
+    preset: 'standard',
+    changes: { shape: 'u', seats: 14, length: 8, width: 8, presenter: true },
+  },
+];
+
+// Starts from a ready-made room. The unit, the meeting platform and the other personal choices stay as they are.
+export function applyScenario(plan: Plan, id: ScenarioId): Plan {
+  const s = scenarios.find((x) => x.id === id) ?? scenarios[0];
+  const room = normalizePlan({ ...applyRoomType(plan, s.type), ...s.changes });
+  return normalizePlan({ ...applyPreset(room, s.preset), ...s.changes });
+}
+
 // ---------------------------------------------------------------- sharing
 
 const KEYS = [
