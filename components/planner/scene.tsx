@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
+import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import {
   BufferGeometry,
   CanvasTexture,
@@ -9,12 +9,15 @@ import {
   ExtrudeGeometry,
   Float32BufferAttribute,
   Matrix4,
+  type Mesh,
+  MOUSE,
   Plane,
   PlaneGeometry,
   Quaternion,
   Raycaster,
   Shape,
   SRGBColorSpace,
+  TOUCH,
   Vector2,
   Vector3,
 } from 'three';
@@ -85,6 +88,20 @@ function Controls({ plan, view }: { plan: Plan; view: ViewState }) {
     c.update();
     invalidate();
   }, [view, camera, invalidate]);
+
+  // Top, Front and Side keep their direction: dragging moves the picture, the wheel zooms, nothing turns. Only 3D rotates.
+  useEffect(() => {
+    const c = controls.current;
+    if (!c) return;
+    const flat = view.name !== 'iso';
+    c.enableRotate = !flat;
+    c.mouseButtons = {
+      LEFT: flat ? MOUSE.PAN : MOUSE.ROTATE,
+      MIDDLE: MOUSE.DOLLY,
+      RIGHT: MOUSE.PAN,
+    };
+    c.touches = { ONE: flat ? TOUCH.PAN : TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN };
+  }, [view.name]);
 
   // A bigger or smaller room (or another kind of room) is framed again, so it never looks lost in the picture.
   useEffect(() => {
@@ -198,23 +215,73 @@ function useScreenTexture() {
 
 function Room({ plan }: { plan: Plan }) {
   const { width: W, length: L, height: H } = plan;
+  // The camera's distance beyond each wall: positive when the wall stands between the camera and the room.
+  const walls = [
+    {
+      key: 'front',
+      position: [0, H / 2, -L / 2],
+      rotation: [0, 0, 0],
+      size: [W, H],
+      color: '#d5d9de',
+      beyond: (p: Vector3) => -p.z - L / 2,
+    },
+    {
+      key: 'back',
+      position: [0, H / 2, L / 2],
+      rotation: [0, 0, 0],
+      size: [W, H],
+      color: '#cfd3d9',
+      beyond: (p: Vector3) => p.z - L / 2,
+    },
+    {
+      key: 'left',
+      position: [-W / 2, H / 2, 0],
+      rotation: [0, Math.PI / 2, 0],
+      size: [L, H],
+      color: '#c4c9cf',
+      beyond: (p: Vector3) => -p.x - W / 2,
+    },
+    {
+      key: 'right',
+      position: [W / 2, H / 2, 0],
+      rotation: [0, Math.PI / 2, 0],
+      size: [L, H],
+      color: '#c9ced4',
+      beyond: (p: Vector3) => p.x - W / 2,
+    },
+  ] as const;
+  const meshes = useRef<(Mesh | null)[]>([]);
+  useFrame(({ camera }) => {
+    walls.forEach((w, i) => {
+      const m = meshes.current[i];
+      if (m) m.visible = w.beyond(camera.position) <= 0.05;
+    });
+  });
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[W, L]} />
         <meshStandardMaterial color="#42506a" roughness={0.95} />
       </mesh>
-      <mesh position={[0, H / 2, -L / 2]}>
-        <planeGeometry args={[W, H]} />
-        <meshStandardMaterial color="#d5d9de" side={DoubleSide} />
-      </mesh>
-      <mesh position={[-W / 2, H / 2, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <planeGeometry args={[L, H]} />
-        <meshStandardMaterial color="#c4c9cf" side={DoubleSide} />
-      </mesh>
-      {/* the two walls that would hide the room are only outlined */}
-      <Outline size={[W, H]} position={[0, H / 2, L / 2]} rotation={[0, 0, 0]} />
-      <Outline size={[L, H]} position={[W / 2, H / 2, 0]} rotation={[0, Math.PI / 2, 0]} />
+      {walls.map((w, i) => (
+        <group key={w.key}>
+          <mesh
+            ref={(m) => {
+              meshes.current[i] = m;
+            }}
+            position={w.position as unknown as Vec3}
+            rotation={w.rotation as unknown as Vec3}
+          >
+            <planeGeometry args={w.size as unknown as [number, number]} />
+            <meshStandardMaterial color={w.color} side={DoubleSide} />
+          </mesh>
+          <Outline
+            size={w.size as unknown as [number, number]}
+            position={w.position as unknown as Vec3}
+            rotation={w.rotation as unknown as Vec3}
+          />
+        </group>
+      ))}
       {plan.ceiling && <Outline size={[W, L]} position={[0, H, 0]} rotation={[Math.PI / 2, 0, 0]} />}
     </group>
   );
