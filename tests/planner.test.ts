@@ -172,8 +172,8 @@ test('one camera sits on the centre line, above the display or below it at eye l
   const bottom = below.displays.centerY - below.displays.height / 2;
   assert.equal(below.gear.cameras[0].pos[0], 0);
   assert.ok(below.gear.cameras[0].pos[1] < bottom);
-  assert.ok(below.gear.cameras[0].pos[1] >= 1 && below.gear.cameras[0].pos[1] <= 1.3, 'near seated eye level');
-  assert.ok(below.displays.centerY > above.displays.centerY, 'the display is raised to make room');
+  assert.ok(below.gear.cameras[0].pos[1] >= 0.6, 'above the floor');
+  assert.equal(below.displays.centerY, above.displays.centerY, 'the display stays where it is; the camera moves');
 });
 
 test('two cameras flank the display; a third at the back follows the presenter', () => {
@@ -430,9 +430,9 @@ const distanceTo = (px: number, pz: number, t: { x: number; z: number; length: n
 };
 
 test('each kind of room offers the tables that make sense for it', () => {
-  assert.deepEqual(roomTypes.huddle.shapes, ['rect', 'round']);
+  assert.deepEqual([...roomTypes.huddle.shapes].sort(), ['rect', 'round', 'semi']);
   assert.deepEqual(roomTypes.training.shapes, ['rect']);
-  assert.deepEqual([...roomTypes.conference.shapes].sort(), ['boat', 'rect', 'round', 'u']);
+  assert.deepEqual([...roomTypes.conference.shapes].sort(), ['boat', 'rect', 'round', 'semi', 'u']);
   assert.deepEqual([...roomTypes.boardroom.shapes].sort(), ['boat', 'rect', 'round', 'u']);
   assert.equal(normalizePlan({ roomType: 'huddle', shape: 'u' }).shape, 'rect');
   assert.equal(normalizePlan({ roomType: 'training', shape: 'boat' }).shape, 'rect');
@@ -464,7 +464,9 @@ test('every table shape seats everyone one chair-width away from the table, insi
           const gap =
             shape === 'round'
               ? Math.abs(Math.hypot(s.x - layout.table.x, s.z - layout.table.z) - layout.table.width / 2)
-              : Math.min(...layout.tables.map((t) => distanceTo(s.x, s.z, t)));
+              : shape === 'semi'
+                ? Math.hypot(s.x, s.z + p.length / 2) - layout.table.length
+                : Math.min(...layout.tables.map((t) => distanceTo(s.x, s.z, t)));
           assert.ok(Math.abs(gap - rules.chairOffset) < 0.05, `${label}: chair at ${gap.toFixed(2)} m from the table`);
         }
         assert.ok(layout.path.length >= 2 && layout.keepOut.length >= 1, `${label}: path and keep-out`);
@@ -486,7 +488,8 @@ test('a boat-shaped table is a rounded rectangle, a little wider than a plain on
   assert.equal(plan({ roomType: 'conference', shape: 'boat', endChairs: true }).endChairs, true);
   assert.equal(plan({ roomType: 'conference', shape: 'round', endChairs: true }).endChairs, false);
   assert.equal(plan({ roomType: 'conference', shape: 'u', endChairs: true }).endChairs, false);
-  assert.equal(plan({ roomType: 'huddle', endChairs: true }).endChairs, false);
+  assert.equal(plan({ roomType: 'huddle', endChairs: true }).endChairs, true, 'a huddle table takes an end chair');
+  assert.equal(plan({ roomType: 'huddle', shape: 'round', endChairs: true }).endChairs, false);
 });
 
 test('a U of tables opens towards the display, with room to stand in the middle', () => {
@@ -573,7 +576,8 @@ test('every ready-made room is complete, fits, and raises no warnings', () => {
     assert.equal(p.roomType, s.type, s.id);
     assert.equal(a.layout.fits, true, `${s.id} fits its room`);
     assert.deepEqual(a.warnings, [], `${s.id} has nothing to check`);
-    assert.ok(a.gear.cameras.length >= 1 && a.items.length >= 5, s.id);
+    // the screen-share room is only a display and a cable: no camera, no platform
+    assert.ok((s.id === 'screen' || a.gear.cameras.length >= 1) && a.items.length >= (s.id === 'screen' ? 4 : 5), s.id);
     for (const [key, value] of Object.entries(s.changes)) {
       assert.deepEqual(p[key as keyof typeof p], value, `${s.id}: ${key}`);
     }
@@ -585,7 +589,7 @@ test('a ready-made room keeps what is personal and replaces what belongs to the 
   for (const s of scenarios) {
     const p = applyScenario({ ...mine, cameraView: true, presenterX: 1, presenterZ: 1, displaySize: 98 }, s.id);
     assert.equal(p.unit, 'ft', s.id);
-    assert.equal(p.system, 'zoom', s.id);
+    assert.equal(p.system, s.id === 'screen' ? 'byod' : 'zoom', s.id);
     assert.equal(p.ceiling, false, s.id);
     assert.equal(p.micShape, 'round', s.id);
     assert.equal(p.cameraView, false, `${s.id}: overlays start off`);
@@ -660,45 +664,50 @@ test('a presenter always brings a camera of their own, at the back, aimed at the
   );
 });
 
-test('ceiling speakers start at the middle package as an even grid, and the top package puts them closer', () => {
+test('ceiling speakers start at the middle package with basic coverage, and the top package puts them closer', () => {
+  const levels = { conference: ['basic', 'full'], boardroom: ['basic', 'good'], training: ['basic', 'good'] } as const;
   for (const roomType of ['conference', 'boardroom', 'training'] as const) {
     const base = applyRoomType(plan(), roomType);
     const standard = applyPreset(base, 'standard');
     const premium = applyPreset(base, 'premium');
     assert.equal(standard.speakers, 'both', `${roomType} standard has wall and ceiling speakers`);
-    assert.equal(standard.speakerCoverage, 'standard');
+    assert.equal(standard.speakerCoverage, levels[roomType][0]);
     assert.equal(premium.speakers, 'both');
-    assert.equal(premium.speakerCoverage, 'dense');
+    assert.equal(premium.speakerCoverage, levels[roomType][1]);
     const few = analyze(standard).gear.speakers.length;
     const all = analyze(premium).gear.speakers.length;
     assert.ok(few >= 2, `${roomType}: at least a pair`);
-    assert.ok(few < all, `${roomType}: ${few} speakers against ${all}`);
+    // good coverage can need as many speakers as basic where the rows happen to fall the same way
+    assert.ok(roomType === 'conference' ? few < all : few <= all, `${roomType}: ${few} speakers against ${all}`);
     assert.equal(
       analyze(applyPreset(base, 'essential')).gear.speakers.length,
       0,
       `${roomType}: none in the first package`,
     );
   }
-  // a table for eight: four ceiling speakers in the middle package, six in the top one
+  // a table for eight: four ceiling speakers with basic or good coverage, six with full
   const eight = { roomType: 'conference', length: 8, width: 6, seats: 8, speakers: 'ceiling', mics: 'ceiling' };
-  assert.equal(analyze(plan({ ...eight, speakerCoverage: 'standard' })).gear.speakers.length, 4);
-  assert.equal(analyze(plan({ ...eight, speakerCoverage: 'dense' })).gear.speakers.length, 6);
+  const n = (speakerCoverage: string) => analyze(plan({ ...eight, speakerCoverage })).gear.speakers.length;
+  assert.deepEqual([n('basic'), n('good'), n('full')], [4, 4, 6]);
+  // the more the speakers overlap, the more of them
   for (const [length, width, seats] of [
     [12, 8, 20],
     [10, 8, 16],
     [8, 6, 8],
   ]) {
     const p = { roomType: 'conference', length, width, seats, speakers: 'ceiling', mics: 'ceiling' };
-    const few = analyze(plan({ ...p, speakerCoverage: 'standard' })).gear.speakers.length;
-    const all = analyze(plan({ ...p, speakerCoverage: 'dense' })).gear.speakers.length;
-    assert.ok(few >= 2 && few < all, `${length} x ${width} m: ${few} against ${all}`);
+    const c = (speakerCoverage: string) => analyze(plan({ ...p, speakerCoverage })).gear.speakers.length;
+    assert.ok(c('basic') >= 2 && c('basic') <= c('good') && c('good') < c('full'), `${length} x ${width} m`);
   }
+  // a classroom for eighteen in a ten by eight room needs eight ceiling speakers, as in a real design
+  assert.equal(analyze(applyScenario(defaultPlan, 'classroom')).gear.speakers.length, 8);
   const item = analyze(applyPreset(plan(), 'standard')).items.find((i) => i.name.startsWith('Ceiling speakers'));
-  assert.ok(item?.note?.startsWith('An even grid'));
-  assert.equal(normalizePlan({ speakerCoverage: 'loud' }).speakerCoverage, 'standard');
-  // older links called these a few ceiling speakers and a full set
-  assert.equal(normalizePlan({ speakerCoverage: 'partial' }).speakerCoverage, 'standard');
-  assert.equal(normalizePlan({ speakerCoverage: 'full' }).speakerCoverage, 'dense');
+  assert.ok(item?.note?.startsWith('Basic coverage'));
+  assert.equal(normalizePlan({ speakerCoverage: 'loud' }).speakerCoverage, 'good');
+  // older links said partial, then standard and dense
+  assert.equal(normalizePlan({ speakerCoverage: 'partial' }).speakerCoverage, 'basic');
+  assert.equal(normalizePlan({ speakerCoverage: 'standard' }).speakerCoverage, 'good');
+  assert.equal(normalizePlan({ speakerCoverage: 'dense' }).speakerCoverage, 'full');
 });
 
 test('a long table gets two microphone arrays, a short one gets one', () => {
@@ -723,9 +732,10 @@ test('one camera sits above or below the display, two sit beside it or above and
   assert.equal(upper.pos[0], 0);
   assert.equal(lower.pos[0], 0);
   assert.ok(upper.pos[1] > top && lower.pos[1] < bottom, 'one above the display, one below it');
-  assert.ok(
-    a.displays.centerY > analyze(plan({ cameras: 'two', cameraSpot: 'sides' })).displays.centerY,
-    'raised for the low one',
+  assert.equal(
+    a.displays.centerY,
+    analyze(plan({ cameras: 'two', cameraSpot: 'sides' })).displays.centerY,
+    'the display does not move for the low camera',
   );
   const sides = spots('two', 'sides');
   assert.equal(sides[0].pos[0], -sides[1].pos[0]);
@@ -770,7 +780,7 @@ test('every ready-made room and package lists its equipment without gaps', () =>
 });
 
 test('the signal flow tells video, audio and control apart, and analog from digital', () => {
-  const kinds = new Set(['video', 'audio', 'control']);
+  const kinds = new Set(['video', 'audio', 'control', 'power']);
   const find = (links: ReturnType<typeof signalFlow>['links'], from: string, to: string, signal?: string) =>
     links.find((l) => l.from === from && l.to === to && (!signal || l.signal === signal));
   for (const speakers of ['none', 'front', 'ceiling', 'both'] as const) {
@@ -783,8 +793,9 @@ test('the signal flow tells video, audio and control apart, and analog from digi
       }
       // what is on the wire follows the kind of device
       assert.equal(find(links, 'system', 'displays')?.signal, 'video');
-      assert.equal(find(links, 'laptops', 'system')?.signal, 'video');
-      assert.equal(find(links, 'touch', 'system')?.signal, 'control');
+      // laptops reach the room system straight, or through the video switcher in the rack
+      assert.equal((find(links, 'laptops', 'system') ?? find(links, 'laptops', 'vswitch'))?.signal, 'video');
+      assert.equal((find(links, 'touch', 'system') ?? find(links, 'touch', 'controller'))?.signal, 'control');
       assert.equal(find(links, 'cameras', 'switch')?.signal, 'video');
       assert.equal(find(links, 'switch', 'system', 'control')?.label, 'PTZ control');
       assert.equal(find(links, 'system', 'displays')?.analog, false, 'HDMI is digital');
@@ -797,10 +808,12 @@ test('the signal flow tells video, audio and control apart, and analog from digi
         assert.equal(find(links, 'mics', 'processor')?.analog, false, 'ceiling arrays are on the network');
         assert.equal(find(links, 'mics', 'switch')?.signal, 'audio');
       }
-      if (speakers === 'front' || speakers === 'both')
-        assert.equal(find(links, 'processor', 'wallSpeakers')?.analog, true, 'wall speakers are fed an analog line');
-      if (speakers === 'ceiling' || speakers === 'both')
-        assert.equal(find(links, 'processor', 'speakers')?.analog, true);
+      // the amplifier sits between the processor and the speakers, with an analog line to them
+      if (speakers === 'front' || speakers === 'both') {
+        assert.equal(find(links, 'processor', 'amp')?.analog, true, 'the amplifier is fed an analog line');
+        assert.equal(find(links, 'amp', 'wallSpeakers')?.analog, true, 'wall speakers are fed an analog line');
+      }
+      if (speakers === 'ceiling' || speakers === 'both') assert.equal(find(links, 'amp', 'speakers')?.analog, true);
     }
   }
   // without a presenter or wireless microphones there is no receiver, without a control device no control link

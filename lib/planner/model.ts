@@ -7,16 +7,22 @@
 // tuned by someone who commissions these rooms; the planner is an indicative sketch, not an engineering drawing.
 
 export type Unit = 'm' | 'ft';
-export type TableShape = 'rect' | 'boat' | 'round' | 'u';
+// `semi` is half a round table, its flat side against the display wall, with people sitting around the curve.
+export type TableShape = 'rect' | 'boat' | 'round' | 'u' | 'semi';
 export type TablePosition = 'center' | 'back' | 'front';
-export type Speakers = 'none' | 'front' | 'ceiling' | 'both'; // a pair beside the display, ceiling speakers, or both
+// Nothing beyond the display's own speakers, a pair beside the display, ceiling speakers, or both
+export type Speakers = 'none' | 'display' | 'front' | 'ceiling' | 'both';
 export type SpeakerSize = 4 | 7 | 8 | 10; // cone diameter in inches; 4 stands for the 4 to 5 in class
 export type SpeakerMount = 'flush' | 'pendant'; // in the ceiling, or hung below it on cords
 export type Mics = 'none' | 'table' | 'ceiling' | 'pendant' | 'gooseneck';
 // Cameras at the display wall. A presenter always adds a camera of their own at the back; `pairs` is two on each
 // side of the display, which the system switches between without a visible cut.
 export type Cameras = 'none' | 'one' | 'two' | 'pairs';
-export type CeilingCoverage = 'standard' | 'dense';
+// How closely ceiling speakers are spaced: `basic` at about the ceiling height (the usual rule of thumb), `good` so
+// that their circles of sound meet without gaps at ear height, `full` with the circles overlapping.
+export type CeilingCoverage = 'basic' | 'good' | 'full';
+// Where the AV equipment lives: behind the display, in a rack in the room, or in a rack outside it.
+export type Rack = 'none' | 'behind' | 'room' | 'outside';
 // Where the cameras at the display go: one above or below the display, two beside it or one above and one below.
 export type CameraSpot = 'above' | 'below' | 'sides' | 'both';
 export type Bar = 'none' | 'compact' | 'large'; // an all-in-one video bar: camera, microphones and speakers
@@ -57,9 +63,14 @@ export type Plan = {
   listeningPlane: boolean;
   mics: Mics;
   micShape: MicShape; // ceiling microphone arrays come square or round
-  speakerCoverage: CeilingCoverage; // ceiling speakers: an even grid, or a denser one
+  speakerCoverage: CeilingCoverage;
   micCoverage: boolean;
   wireless: 0 | 2 | 4; // handheld or lapel microphones, interchangeable
+  credenzaX: number | null; // the small cabinet with the wireless microphones and their charger; null: a default corner
+  credenzaZ: number | null;
+  rack: Rack;
+  rackX: number | null; // where the rack was dragged to; null: its default place
+  rackZ: number | null;
   dsp: boolean; // an audio processor: echo cancellation and mixing
   engine: boolean; // a separate room computer for the meeting platform; a video bar can run it by itself
   cameras: Cameras;
@@ -103,7 +114,7 @@ export const roomTypes: Record<RoomType, RoomKind> = {
     front: 1.0,
     back: 0.8,
     aisle: 0.8,
-    shapes: ['rect', 'round'],
+    shapes: ['rect', 'semi', 'round'],
   },
   conference: {
     label: 'Conference',
@@ -115,7 +126,7 @@ export const roomTypes: Record<RoomType, RoomKind> = {
     front: 1.4,
     back: 1.0,
     aisle: 0.95,
-    shapes: ['rect', 'boat', 'round', 'u'],
+    shapes: ['rect', 'boat', 'round', 'semi', 'u'],
   },
   boardroom: {
     label: 'Boardroom',
@@ -149,10 +160,16 @@ export const tableShapes: Record<TableShape, { label: string; about: string }> =
   boat: { label: 'Boat-shaped', about: 'Long with rounded ends, so everyone can see each other.' },
   round: { label: 'Round', about: 'Equal seats for a small group.' },
   u: { label: 'U-shaped', about: 'Open towards the display; people sit around the outside.' },
+  semi: {
+    label: 'Semi-round',
+    about:
+      'Half a round table with its flat side against the display wall; everyone sits around the curve facing the display.',
+  },
 };
 
 export function seatLimits(type: RoomType, shape: TableShape): [number, number] {
   const [lo, hi] = roomTypes[type].seats;
+  if (shape === 'semi') return [Math.max(3, lo), Math.min(8, hi)];
   if (shape === 'round') return [Math.max(3, lo), Math.min(14, hi)];
   if (shape === 'boat') return [Math.max(4, lo), Math.min(20, hi)];
   if (shape === 'u') return [Math.max(6, lo), hi];
@@ -180,12 +197,19 @@ export const rules = {
   speakerAngle: { 4: 40, 7: 45, 8: 50, 10: 55 },
   speakerMaxHeight: { 4: 3.0, 7: 3.6, 8: 4.2, 10: 5.0 },
   pendantDrop: 0.6, // how far a pendant speaker or microphone hangs below the ceiling
-  denseSpacing: 0.72, // dense coverage puts the speakers this much closer together
+  // Ceiling speaker spacing, in units of the radius of a speaker's circle of sound at ear height: `good` is where the
+  // circles of a square grid just meet (1.41), `full` has them overlap; `basic` is spaced at the ceiling height.
+  coverageSpacing: { good: 1.41, full: 1.0 },
   ceilingMicHalfAngle: 55,
   micArrayEvery: 3.5, // metres of table per ceiling microphone array: a long table gets two
   tableMicEvery: 4, // seats per table microphone
   panelEvery: 2.4, // metres of table per connection panel
-  displayBottomOverCamera: 1.4, // a camera under the display sits near seated eye level (1.2 m)
+  // Slim wall speakers, sized like a K-array Kobra KK52 (spec sheet): 59 x 497 x 81 mm.
+  wallSpeaker: { width: 0.06, height: 0.5, depth: 0.08 },
+  // A small cabinet for the wireless microphones and their charger, and the rack cabinet (19 in, 44.5 mm per unit).
+  credenza: { width: 0.9, height: 0.8, depth: 0.4 },
+  rackUnit: 0.0445,
+  rackBody: { width: 0.6, depth: 0.75 },
   // All-in-one video bars (indicative sizes): a compact one for huddles and a larger one for medium rooms.
   bar: {
     compact: { width: 0.6, height: 0.09, depth: 0.1 },
@@ -229,9 +253,14 @@ export const defaultPlan: Plan = {
   listeningPlane: false,
   mics: 'ceiling',
   micShape: 'square',
-  speakerCoverage: 'standard',
+  speakerCoverage: 'good',
   micCoverage: false,
   wireless: 2,
+  credenzaX: null,
+  credenzaZ: null,
+  rack: 'room',
+  rackX: null,
+  rackZ: null,
   dsp: true,
   engine: true,
   cameras: 'one',
@@ -326,9 +355,14 @@ const bare = {
   speakers: 'none',
   speakerSize: 7,
   speakerMount: 'flush',
-  speakerCoverage: 'standard',
+  speakerCoverage: 'basic',
   mics: 'none',
   wireless: 0,
+  credenzaX: null,
+  credenzaZ: null,
+  rack: 'none',
+  rackX: null,
+  rackZ: null,
   dsp: false,
   engine: false,
   cameras: 'none',
@@ -358,7 +392,7 @@ export function normalizePlan(input: Partial<Record<keyof Plan, unknown>> = {}):
   const kind = roomTypes[roomType];
   const huddle = roomType === 'huddle';
   const training = roomType === 'training';
-  const wanted = oneOf(input.shape, ['rect', 'boat', 'round', 'u'] as const, templates[roomType].shape);
+  const wanted = oneOf(input.shape, ['rect', 'boat', 'round', 'semi', 'u'] as const, templates[roomType].shape);
   const shape: TableShape = kind.shapes.includes(wanted) ? wanted : templates[roomType].shape;
   const seats = Math.round(numIn(input.seats, seatLimits(roomType, shape), templates[roomType].seats));
   const length = round2(numIn(input.length, kind.length, templates[roomType].length));
@@ -377,7 +411,7 @@ export function normalizePlan(input: Partial<Record<keyof Plan, unknown>> = {}):
 
   const speakers = oneOf(
     huddle && input.speakers === 'ceiling' ? 'front' : huddle && input.speakers === 'both' ? 'front' : input.speakers,
-    ['none', 'front', 'ceiling', 'both'] as const,
+    ['none', 'display', 'front', 'ceiling', 'both'] as const,
     legacyBar ? 'none' : d.speakers,
   );
   const wantedMics = oneOf(
@@ -431,8 +465,10 @@ export function normalizePlan(input: Partial<Record<keyof Plan, unknown>> = {}):
     shape,
     seats,
     position: training ? 'center' : oneOf(input.position, ['center', 'back', 'front'] as const, d.position),
+    // a huddle table takes one chair at the end facing the display; a larger one, a chair at each end
     endChairs:
-      (roomType === 'conference' || roomType === 'boardroom') && (shape === 'rect' || shape === 'boat')
+      ((roomType === 'conference' || roomType === 'boardroom') && (shape === 'rect' || shape === 'boat')) ||
+      (huddle && shape === 'rect')
         ? bool(input.endChairs, d.endChairs)
         : false,
     presenter,
@@ -455,12 +491,18 @@ export function normalizePlan(input: Partial<Record<keyof Plan, unknown>> = {}):
     listeningPlane: bool(input.listeningPlane, d.listeningPlane),
     mics,
     micShape: oneOf(input.micShape, ['square', 'round'] as const, d.micShape),
-    // `partial` and `full` are what older links called a few ceiling speakers and a full set
-    speakerCoverage:
-      input.speakerCoverage === 'full'
-        ? 'dense'
-        : oneOf(input.speakerCoverage, ['standard', 'dense'] as const, d.speakerCoverage),
+    // older links said `partial`, then `standard` and `dense`, for what is now basic, good and full
+    speakerCoverage: oneOf(
+      { partial: 'basic', standard: 'good', dense: 'full' }[String(input.speakerCoverage)] ?? input.speakerCoverage,
+      ['basic', 'good', 'full'] as const,
+      d.speakerCoverage,
+    ),
     micCoverage: bool(input.micCoverage, d.micCoverage),
+    credenzaX: spot(input.credenzaX, -width / 2 + 0.25, width / 2 - 0.25),
+    credenzaZ: spot(input.credenzaZ, -length / 2 + 0.25, length / 2 - 0.25),
+    rack: oneOf(input.rack, ['none', 'behind', 'room', 'outside'] as const, huddle ? 'behind' : d.rack),
+    rackX: spot(input.rackX, -width / 2 - 3, width / 2 + 3),
+    rackZ: spot(input.rackZ, -length / 2 - 3, length / 2 + 3),
     // a presenter holds a wireless microphone, so there are always some
     wireless: presenter && wireless === 0 ? 2 : wireless,
     dsp: huddle ? false : bool(input.dsp, external),
@@ -493,6 +535,10 @@ export function applyRoomType(plan: Plan, type: RoomType): Plan {
     micCoverage: false,
     cameraView: false,
     listeningPlane: false,
+    credenzaX: null,
+    credenzaZ: null,
+    rackX: null,
+    rackZ: null,
   });
 }
 // ---------------------------------------------------------------- table, chairs and where they stand
@@ -511,6 +557,7 @@ export type Layout = {
   rows: { count: number; perRow: number; desks: number } | null; // classrooms only
   path: [number, number][]; // a line along the tabletop, where table microphones and connection panels go
   touchSpot: [number, number]; // where a touch panel sits on the table
+  center: [number, number]; // the middle of the tabletop, or of the desks
   keepOut: Obstacle[];
 };
 
@@ -565,7 +612,15 @@ function uDims(seats: number) {
   return { back, left, right, depth, width, arm, length: round2(arm + depth) };
 }
 
-export function tableSize(shape: TableShape, seats: number, endChairs: boolean, small = false) {
+// The radius of a semi-round table, wide enough to seat everyone around the curve.
+export const semiRadius = (seats: number) => round2(Math.max(0.9, (0.62 * seats) / Math.PI - rules.chairOffset + 0.05));
+
+// `endChairs` is how many chairs stand at the ends of a rectangular table: none, one (true for a huddle) or two.
+export function tableSize(shape: TableShape, seats: number, endChairs: boolean | number, small = false) {
+  if (shape === 'semi') {
+    const r = semiRadius(seats);
+    return { length: r, width: round2(2 * r) };
+  }
   if (shape === 'round') {
     const d = round2(Math.max(small ? 1.0 : 1.2, (seats * rules.seatPitch) / Math.PI));
     return { length: d, width: d };
@@ -574,7 +629,8 @@ export function tableSize(shape: TableShape, seats: number, endChairs: boolean, 
     const u = uDims(seats);
     return { length: u.length, width: u.width };
   }
-  const regular = Math.max(1, seats - (endChairs ? 2 : 0));
+  const ends = typeof endChairs === 'number' ? endChairs : endChairs ? 2 : 0;
+  const regular = Math.max(1, seats - ends);
   const perSide = Math.ceil(regular / 2);
   const width = small ? 1.0 : seats <= 8 ? 1.2 : seats <= 14 ? 1.4 : 1.6;
   if (shape === 'boat') {
@@ -633,7 +689,40 @@ function classroomLayout(plan: Plan): Layout {
     rows: { count, perRow, desks: tables.length },
     path: lengthwise(table),
     touchSpot: [0.35, round2(table.z - table.length / 2 + 0.4)],
+    center: [table.x, table.z],
     keepOut: [around(table, true)],
+  };
+}
+
+// Half a round table with its flat side against the display wall. People sit around the curve, facing the display.
+function semiLayout(plan: Plan): Layout {
+  const { length: L, width: W } = plan;
+  const wall = -L / 2;
+  const r = semiRadius(plan.seats);
+  const ring = r + rules.chairOffset;
+  const seats: Seat[] = [];
+  for (let i = 0; i < plan.seats; i++) {
+    const a = -Math.PI / 2 + ((i + 0.5) * Math.PI) / plan.seats;
+    const x = Math.sin(a) * ring;
+    const z = wall + Math.cos(a) * ring;
+    seats.push({ x: round2(x), z: round2(z), rot: facing(-x, wall - z) });
+  }
+  const table: TableBlock = { shape: 'semi', x: 0, z: round2(wall + r / 2), length: r, width: round2(2 * r) };
+  const arc = [-60, -30, 0, 30, 60].map((deg): [number, number] => {
+    const a = (deg * Math.PI) / 180;
+    return [round2(Math.sin(a) * r * 0.62), round2(wall + Math.cos(a) * r * 0.62)];
+  });
+  return {
+    table,
+    tables: [table],
+    seats,
+    endChairs: false,
+    fits: ring + 0.33 + 0.6 <= L && 2 * (ring + 0.33) <= W,
+    rows: null,
+    path: arc,
+    touchSpot: [0.35, round2(wall + 0.35)],
+    center: [0, round2(wall + r * 0.45)],
+    keepOut: [{ k: 'circle', x: 0, z: wall, r: ring + 0.33 }],
   };
 }
 
@@ -688,6 +777,7 @@ function uLayout(plan: Plan): Layout {
       [round2(armX), round2(zFront + 0.2)],
     ],
     touchSpot: [0.35, round2(zBase - 0.1)],
+    center: [0, round2(zBase)],
     keepOut: [
       { k: 'rect', x0: -outer, x1: -inner, z0: zFront - 0.35, z1: zBase },
       { k: 'rect', x0: inner, x1: outer, z0: zFront - 0.35, z1: zBase },
@@ -699,13 +789,17 @@ function uLayout(plan: Plan): Layout {
 export function computeLayout(plan: Plan): Layout {
   if (plan.roomType === 'training') return classroomLayout(plan);
   if (plan.shape === 'u') return uLayout(plan);
+  if (plan.shape === 'semi') return semiLayout(plan);
   const { length: L, width: W } = plan;
   const kind = roomTypes[plan.roomType];
+  const huddle = plan.roomType === 'huddle';
   const lengthways = plan.shape === 'rect' || plan.shape === 'boat';
-  const ends = lengthways && plan.endChairs && plan.seats >= 4;
-  const dim = tableSize(plan.shape, plan.seats, ends, plan.roomType === 'huddle');
+  // a huddle table takes one chair at the far end, facing the display; a larger table, one at each end
+  const endCount = lengthways && plan.endChairs && plan.seats >= (huddle ? 3 : 4) ? (huddle ? 1 : 2) : 0;
+  const ends = endCount > 0;
+  const dim = tableSize(plan.shape, plan.seats, endCount, huddle);
   const endExtra = ends ? 0.7 : 0;
-  const zMin = -L / 2 + kind.front + endExtra + dim.length / 2;
+  const zMin = -L / 2 + kind.front + (endCount === 2 ? endExtra : 0) + dim.length / 2;
   const zMax = L / 2 - kind.back - endExtra - dim.length / 2;
   const fitsLength = zMin <= zMax;
   const fits = fitsLength && dim.width + 2 * kind.aisle <= W;
@@ -721,7 +815,7 @@ export function computeLayout(plan: Plan): Layout {
       seats.push({ x: round2(x), z: round2(z), rot: facing(-x, -(z - tz)) });
     }
   } else {
-    const regular = plan.seats - (ends ? 2 : 0);
+    const regular = plan.seats - endCount;
     const left = Math.ceil(regular / 2);
     const right = Math.floor(regular / 2);
     // along a boat-shaped table the chairs stand beside the straight part, between the rounded ends
@@ -734,10 +828,10 @@ export function computeLayout(plan: Plan): Layout {
     const off = dim.width / 2 + rules.chairOffset;
     side(left, -off, facing(1, 0));
     side(right, off, facing(-1, 0));
-    if (ends) {
+    if (endCount === 2) {
       seats.push({ x: 0, z: round2(tz - dim.length / 2 - rules.chairOffset), rot: facing(0, 1) });
-      seats.push({ x: 0, z: round2(tz + dim.length / 2 + rules.chairOffset), rot: facing(0, -1) });
     }
+    if (ends) seats.push({ x: 0, z: round2(tz + dim.length / 2 + rules.chairOffset), rot: facing(0, -1) });
   }
   const table: TableBlock = { shape: plan.shape, x: 0, z: round2(tz), length: dim.length, width: dim.width };
   const keepOut: Obstacle[] =
@@ -751,6 +845,7 @@ export function computeLayout(plan: Plan): Layout {
     rows: null,
     path: lengthwise(table),
     touchSpot: [0.35, round2(table.z - table.length / 2 + 0.4)],
+    center: [table.x, table.z],
     keepOut,
   };
 }
@@ -773,11 +868,6 @@ export type DisplayInfo = {
   whiteboard: { x: number; width: number; height: number; centerY: number } | null; // on the display wall
 };
 
-// Whether something sits low on the display wall, so the display has to be hung higher: a camera or a bar below it.
-const lowDevice = (plan: Plan) =>
-  (plan.bar !== 'none' || plan.cameras === 'one' || plan.cameras === 'two') &&
-  (plan.cameraSpot === 'below' || plan.cameraSpot === 'both');
-
 export function computeDisplays(plan: Plan, layout: Layout): DisplayInfo {
   const f = rules.viewFactorLow - (rules.viewFactorLow - rules.viewFactorHigh) * plan.readability;
   const farthest = layout.seats.reduce((m, s) => Math.max(m, Math.hypot(s.x, s.z + plan.length / 2)), 0);
@@ -787,8 +877,8 @@ export function computeDisplays(plan: Plan, layout: Layout): DisplayInfo {
   const size = plan.displaySize ?? recommended;
   const height = round2(size * 0.01245);
   const width = round2(size * 0.02214);
-  const bottomMin = lowDevice(plan) ? rules.displayBottomOverCamera : rules.displayBottomMin;
-  const lo = bottomMin + height / 2;
+  // the display stays where it is; a camera or a bar below it is the one that moves
+  const lo = rules.displayBottomMin + height / 2;
   const hi = plan.height - 0.25 - height / 2;
   const centerY = round2(Math.min(hi, Math.max(lo, rules.displayCenterHeight)));
   const gap = 0.12;
@@ -844,6 +934,13 @@ export type CameraSpec = {
   kind: CameraKind;
   wall: 'front' | 'left' | 'right' | 'back' | 'table'; // what it is fixed to
 };
+// What goes into the rack, top to bottom. Names are by function, not by brand.
+export type RackKind = 'control' | 'video' | 'audio' | 'network' | 'compute' | 'laptop' | 'power' | 'blank';
+export type RackItem = { name: string; u: number; kind: RackKind };
+// A cable run drawn on the floor and up the wall. A laptop cable carries HDMI and USB-C, a control cable is network.
+export type CableKind = 'laptop' | 'control' | 'display';
+export type Cable = { kind: CableKind; label: string; points: Vec3[] };
+export type Wall = 'front' | 'back' | 'left' | 'right';
 export type Equipment = {
   speakers: Vec3[]; // ceiling speakers
   speakerRadius: number;
@@ -858,7 +955,107 @@ export type Equipment = {
   cameras: CameraSpec[];
   panels: Vec3[];
   control: Vec3 | null;
+  laptopInputs: Vec3[]; // where a laptop plugs in on the table
+  pucks: Vec3[]; // wireless sharing buttons on the table
+  cables: Cable[];
+  // the cabinet for the wireless microphones: their charger, and the handhelds and lapels standing in it
+  credenza: { pos: Vec3; rot: number; wall: Wall; mics: ('handheld' | 'lapel')[] } | null;
+  // the equipment: in a box behind the display, or in a rack in the room or outside it
+  rack: {
+    mode: Exclude<Rack, 'none'>;
+    pos: Vec3;
+    rot: number;
+    wall: Wall | null;
+    outside: boolean;
+    u: number;
+    items: RackItem[];
+    width: number;
+    height: number;
+    depth: number;
+  } | null;
 };
+
+// Pulls a spot to the nearest wall: the object stands against it, facing into the room.
+export function snapToWall(plan: Pick<Plan, 'width' | 'length'>, x: number, z: number, depth: number) {
+  const W = plan.width;
+  const L = plan.length;
+  const edges: [Wall, number][] = [
+    ['left', x + W / 2],
+    ['right', W / 2 - x],
+    ['front', z + L / 2],
+    ['back', L / 2 - z],
+  ];
+  const wall = edges.sort((a, b) => a[1] - b[1])[0][0];
+  const margin = 0.45;
+  const sx = clamp(x, -W / 2 + margin, W / 2 - margin);
+  const sz = clamp(z, -L / 2 + margin, L / 2 - margin);
+  const at = {
+    left: { x: -W / 2 + depth / 2, z: sz, rot: Math.PI / 2 },
+    right: { x: W / 2 - depth / 2, z: sz, rot: -Math.PI / 2 },
+    front: { x: sx, z: -L / 2 + depth / 2, rot: 0 },
+    back: { x: sx, z: L / 2 - depth / 2, rot: Math.PI },
+  }[wall];
+  return { x: round2(at.x), z: round2(at.z), rot: at.rot, wall };
+}
+
+// Where a dragged rack ends up: against a wall inside the room, or outside it, one metre beyond the nearest wall.
+export function moveRack(plan: Pick<Plan, 'width' | 'length' | 'rack'>, x: number, z: number) {
+  if (plan.rack === 'room') {
+    const s = snapToWall(plan, x, z, rules.rackBody.depth);
+    return { x: s.x, z: s.z };
+  }
+  const W = plan.width;
+  const L = plan.length;
+  if (Math.abs(x) > W / 2 + 0.3 || Math.abs(z) > L / 2 + 0.3) return { x: round2(x), z: round2(z) };
+  const edges: [string, number][] = [
+    ['left', x + W / 2],
+    ['right', W / 2 - x],
+    ['front', z + L / 2],
+    ['back', L / 2 - z],
+  ];
+  const wall = edges.sort((a, b) => a[1] - b[1])[0][0];
+  if (wall === 'left') return { x: round2(-W / 2 - 1.1), z: round2(z) };
+  if (wall === 'right') return { x: round2(W / 2 + 1.1), z: round2(z) };
+  if (wall === 'front') return { x: round2(x), z: round2(-L / 2 - 1.1) };
+  return { x: round2(x), z: round2(L / 2 + 1.1) };
+}
+
+// The units of the rack, by what the room needs. Every room gets a power distribution unit; the rest follows from
+// the choices: a network switch for networked devices, an audio processor and amplifier, a video switcher for laptops,
+// a computer for the meeting platform, a place for the client's laptop.
+export function rackItems(plan: Plan, parts: { networked: number }): RackItem[] {
+  const items: RackItem[] = [];
+  const add = (name: string, u: number, kind: RackKind) => items.push({ name, u, kind });
+  const projector = plan.displayType === 'projector';
+  const cable = plan.sharing === 'cable' || plan.sharing === 'both';
+  const wireless = plan.sharing === 'wireless' || plan.sharing === 'both';
+  if (plan.control !== 'none' && (plan.system === 'byod' || plan.displayType !== 'flat' || plan.displays === 2)) {
+    add('Control processor', 1, 'control');
+  }
+  if (plan.displays === 2 || (cable && wireless)) add('Video matrix switcher', 1, 'video');
+  else if (cable || wireless) add('Video switcher (HDMI and USB-C)', 1, 'video');
+  if (projector || plan.rack === 'outside') {
+    add('Video transmitter', 1, 'video');
+    add('Video receiver', 1, 'video');
+  }
+  if (wireless) add('Wireless presentation gateway', 1, 'network');
+  if (plan.engine && plan.system !== 'byod') add('Room computer', 2, 'compute');
+  if (cable && plan.rack !== 'behind') add("Client's laptop shelf (space kept free)", 2, 'laptop');
+  if (plan.dsp) add('Audio processor (DSP)', 1, 'audio');
+  if (plan.speakers === 'front' || plan.speakers === 'ceiling' || plan.speakers === 'both') {
+    add('Power amplifier', 1, 'audio');
+  }
+  if (plan.wireless > 0) add('Wireless microphone receiver', 1, 'audio');
+  if (parts.networked > 0 || plan.engine || wireless || plan.control === 'table') {
+    add('Network switch (PoE)', 1, 'network');
+  }
+  add('Power distribution unit (PDU)', 1, 'power');
+  return items;
+}
+
+// The smallest standard rack that holds the units, with a unit or two to spare; the rest is blank panels.
+const rackSizes = [6, 10, 12, 16, 20, 24, 32, 42];
+const rackHeight = (u: number) => round2(u * rules.rackUnit + 0.2);
 
 export function computeEquipment(plan: Plan, layout: Layout, d: DisplayInfo): Equipment {
   const { length: L, width: W, height: H } = plan;
@@ -885,9 +1082,15 @@ export function computeEquipment(plan: Plan, layout: Layout, d: DisplayInfo): Eq
   if (plan.speakers === 'ceiling' || plan.speakers === 'both') {
     const drop = Math.max(0.5, H - speakerDrop - rules.earHeight);
     speakerRadius = round2(drop * Math.tan((rules.speakerAngle[plan.speakerSize] * Math.PI) / 180));
-    const spacing = speakerRadius * 1.41 * (plan.speakerCoverage === 'dense' ? rules.denseSpacing : 1);
+    // basic: spaced at about the ceiling height; good: circles that just meet; full: circles that overlap
+    const angle = (rules.speakerAngle[plan.speakerSize] * Math.PI) / 180;
+    const spacing =
+      plan.speakerCoverage === 'basic'
+        ? (H - speakerDrop) * Math.tan(angle)
+        : speakerRadius * rules.coverageSpacing[plan.speakerCoverage];
     const zoneW = Math.min(W - 0.4, t.width + 2.4);
-    const zoneL = Math.min(L - 0.4, t.length + 2.0 + (layout.endChairs ? 1.4 : 0));
+    // rows of desks have their chairs on one side only
+    const zoneL = Math.min(L - 0.4, t.length + (layout.rows ? 1.6 : 2.0 + (layout.endChairs ? 1.4 : 0)));
     let nx = Math.max(1, Math.ceil(zoneW / spacing));
     // no speaker on the centre line, where a ceiling microphone hangs
     if ((plan.mics === 'ceiling' || plan.mics === 'pendant') && nx % 2 === 1) nx += 1;
@@ -918,7 +1121,12 @@ export function computeEquipment(plan: Plan, layout: Layout, d: DisplayInfo): Eq
   } else if (plan.mics === 'table') {
     micRadius = 1.4;
     const n = plan.roomType === 'huddle' ? 1 : Math.max(1, Math.ceil(plan.seats / rules.tableMicEvery));
-    for (const [x, z] of alongPath(layout.path, n)) mics.push([x, 0.78, z]);
+    // a table camera stands in the middle; a microphone that would stand on it is moved a little along the table
+    for (const [x, z] of alongPath(layout.path, n)) {
+      const near = plan.tableCamera && Math.hypot(x - layout.center[0], z - (layout.center[1] - 0.22)) < 0.35;
+      const edge = t.z + t.length / 2 - 0.1;
+      mics.push([x, 0.78, near ? round2(Math.min(z + 0.4, edge)) : z]);
+    }
   } else if (plan.mics === 'gooseneck') {
     micRadius = 0.9;
     layout.seats.forEach((s, i) => {
@@ -1009,14 +1217,17 @@ export function computeEquipment(plan: Plan, layout: Layout, d: DisplayInfo): Eq
     }
   }
 
-  // a small round camera on the table, at the end nearest the display
+  // A small round camera in the middle of the table. It looks all round (360 degrees), so it is drawn with a circle
+  // of view, not a wedge. A U of tables has no middle, so it stands at the near end of an arm instead.
   if (plan.tableCamera) {
-    const nearEnd = t.z - (t.shape === 'round' ? t.width : t.length) / 2 + 0.35;
+    const middle = t.shape !== 'u';
+    const x = middle ? layout.center[0] : -t.width / 2 + 0.45;
+    const z = middle ? layout.center[1] - 0.22 : t.z - t.length / 2 + 0.35;
     cameras.push({
-      pos: [-0.3, 0.87, round2(nearEnd)],
-      target: [0, 1.2, round2(t.z + t.length * 0.2)],
-      hfov: 100,
-      vfov: 60,
+      pos: [round2(x), 0.87, round2(z)],
+      target: [round2(x), 1.2, round2(z + 1)],
+      hfov: 360,
+      vfov: 90,
       kind: 'table',
       wall: 'table',
     });
@@ -1030,6 +1241,135 @@ export function computeEquipment(plan: Plan, layout: Layout, d: DisplayInfo): Eq
   let control: Vec3 | null = null;
   if (plan.control === 'table') control = [layout.touchSpot[0], 0.78, layout.touchSpot[1]];
   if (plan.control === 'wall') control = [-W / 2 + 0.04, 1.35, round2(L / 2 - 1.0)];
+
+  // laptops on a cable plug into a panel on the table, or into the tabletop where there is no panel; a wireless
+  // sharing button stands on the table beside them, two for a big table
+  const cable = plan.sharing === 'cable' || plan.sharing === 'both';
+  const wirelessShare = plan.sharing === 'wireless' || plan.sharing === 'both';
+  const sockets = panels.length ? panels : alongPath(layout.path, 1).map(([x, z]): Vec3 => [x, 0.765, z]);
+  const laptopInputs: Vec3[] = cable ? sockets.slice(0, 2) : [];
+  const pucks: Vec3[] = wirelessShare
+    ? alongPath(layout.path, plan.seats >= 6 ? 2 : 1).map(([x, z]): Vec3 => [round2(x + 0.2), 0.77, z])
+    : [];
+
+  // the rack: a box behind the display, a rack standing against a wall, or one outside the room
+  const networked =
+    (plan.mics === 'ceiling' || plan.mics === 'pendant' ? mics.length : 0) +
+    ptzCameras({ cameras } as Equipment).length;
+  let rack: Equipment['rack'] = null;
+  if (plan.rack !== 'none') {
+    const items = rackItems(plan, { networked });
+    const used = items.reduce((sum, i) => sum + i.u, 0);
+    const u = plan.rack === 'behind' ? 6 : (rackSizes.find((s) => s >= used + 1) ?? used);
+    const body = rules.rackBody;
+    if (plan.rack === 'behind') {
+      rack = {
+        mode: 'behind',
+        pos: [0, round2(d.centerY), round2(frontZ - 0.06)],
+        rot: Math.PI,
+        wall: 'front',
+        outside: false,
+        u,
+        items,
+        width: 0.5,
+        height: round2(u * rules.rackUnit + 0.05),
+        depth: 0.12,
+      };
+    } else if (plan.rack === 'room') {
+      const s = snapToWall(plan, plan.rackX ?? -W / 2 + 0.5, plan.rackZ ?? frontZ + 0.5, body.depth);
+      rack = {
+        mode: 'room',
+        pos: [s.x, 0, s.z],
+        rot: s.rot,
+        wall: s.wall,
+        outside: false,
+        u,
+        items,
+        width: body.width,
+        height: rackHeight(u),
+        depth: body.depth,
+      };
+    } else {
+      const x = plan.rackX ?? -W / 2 - 1.1;
+      const z = plan.rackZ ?? frontZ + 0.9;
+      const inside = Math.abs(x) < W / 2 && Math.abs(z) < L / 2;
+      rack = {
+        mode: 'outside',
+        pos: [x, 0, z],
+        // its front faces the room, square to the wall it stands beside
+        rot: inside
+          ? 0
+          : Math.abs(x) - W / 2 >= Math.abs(z) - L / 2
+            ? x < 0
+              ? Math.PI / 2
+              : -Math.PI / 2
+            : z < 0
+              ? 0
+              : Math.PI,
+        wall: null,
+        outside: !inside,
+        u,
+        items,
+        width: body.width,
+        height: rackHeight(u),
+        depth: body.depth,
+      };
+    }
+  }
+
+  // the cabinet with the wireless microphones, against a wall; by default in the corner next to the display wall
+  let credenza: Equipment['credenza'] = null;
+  if (plan.wireless > 0) {
+    const c = rules.credenza;
+    const s = snapToWall(plan, plan.credenzaX ?? W / 2 - 0.6, plan.credenzaZ ?? frontZ + 0.5, c.depth);
+    credenza = {
+      pos: [s.x, 0, s.z],
+      rot: s.rot,
+      wall: s.wall,
+      mics: plan.wireless === 4 ? ['handheld', 'handheld', 'lapel', 'lapel'] : ['handheld', 'lapel'],
+    };
+  }
+
+  // Cables run from the table down to the floor, along it to the wall, and up the wall to the equipment: the bar or the
+  // display, or the rack. They are drawn dashed, as if under the floor, so furniture hides them.
+  const cables: Cable[] = [];
+  const floor = 0.012;
+  const lane = (n: number) => round2(frontZ + 0.06 + n * 0.05);
+  const toBox = (from: Vec3, n: number): Vec3[] => {
+    const bundle = lane(n);
+    if (rack && rack.mode !== 'behind') {
+      const [rx, , rz] = rack.pos;
+      return [from, [from[0], floor, from[2]], [from[0], floor, rz], [rx, floor, rz], [rx, 0.9, rz]];
+    }
+    const y = bar ? bar.pos[1] : Math.max(0.3, displayBottom - 0.1);
+    const x = bar ? bar.pos[0] : 0;
+    return [from, [from[0], floor, from[2]], [from[0], floor, bundle], [x, floor, bundle], [x, y, bundle]];
+  };
+  laptopInputs.forEach((p, i) =>
+    cables.push({ kind: 'laptop', label: 'HDMI and USB-C', points: toBox([p[0], 0.77, p[2]], i).map(round3) }),
+  );
+  if (control && plan.control === 'table') {
+    cables.push({
+      kind: 'control',
+      label: 'Control, network cable',
+      points: toBox([control[0], 0.77, control[2]], 2).map(round3),
+    });
+  }
+  if (rack && rack.mode !== 'behind') {
+    const [rx, , rz] = rack.pos;
+    const wallZ = lane(3);
+    cables.push({
+      kind: 'display',
+      label: 'HDMI to the display',
+      points: [
+        [rx, 0.9, rz],
+        [rx, floor, rz],
+        [rx, floor, wallZ],
+        [0, floor, wallZ],
+        [0, round2(displayBottom - 0.1), wallZ],
+      ].map((p) => round3(p as Vec3)),
+    });
+  }
 
   return {
     speakers,
@@ -1045,8 +1385,19 @@ export function computeEquipment(plan: Plan, layout: Layout, d: DisplayInfo): Eq
     cameras,
     panels,
     control,
+    laptopInputs,
+    pucks,
+    cables,
+    credenza,
+    rack,
   };
 }
+
+const round3 = (p: Vec3): Vec3 => [
+  Math.round(p[0] * 1000) / 1000,
+  Math.round(p[1] * 1000) / 1000,
+  Math.round(p[2] * 1000) / 1000,
+];
 
 // ---------------------------------------------------------------- the equipment list and warnings
 
@@ -1060,6 +1411,12 @@ export const systemName: Record<RoomSystem, string> = {
 };
 
 export const speakerSizeLabel: Record<SpeakerSize, string> = { 4: '4 to 5 in', 7: '7 in', 8: '8 in', 10: '10 in' };
+
+export const coverageNote: Record<CeilingCoverage, string> = {
+  basic: 'Basic coverage: spaced at about the ceiling height, enough for speech.',
+  good: 'Good coverage: even sound, with no gaps between the speakers.',
+  full: 'Full coverage: closer together, for even sound and music everywhere.',
+};
 
 export type Analysis = {
   layout: Layout;
@@ -1103,7 +1460,11 @@ export function analyze(plan: Plan): Analysis {
     });
     items.push({ name: `Retractable screen, ${displays.size}"`, qty: displays.count, note: shown });
   } else {
-    items.push({ name: `${displays.size}" display`, qty: displays.count, note: shown });
+    items.push({
+      name: `${displays.size}" display`,
+      qty: displays.count,
+      note: plan.speakers === 'display' ? `${shown} The sound comes from the display's own speakers.` : shown,
+    });
   }
   if (plan.whiteboard)
     items.push({ name: 'Interactive whiteboard, 86"', qty: 1, note: 'On the display wall, beside the display.' });
@@ -1127,15 +1488,16 @@ export function analyze(plan: Plan): Analysis {
     });
   }
   if (plan.speakers === 'front' || plan.speakers === 'both')
-    items.push({ name: 'Wall speakers beside the display', qty: 2 });
+    items.push({
+      name: 'Slim wall speakers beside the display',
+      qty: 2,
+      note: 'Line-array columns about 60 mm wide, like a K-array Kobra.',
+    });
   if (plan.speakers === 'ceiling' || plan.speakers === 'both') {
     items.push({
       name: `Ceiling speakers, ${speakerSizeLabel[plan.speakerSize]}, ${plan.speakerMount === 'pendant' ? 'hung on cords' : 'flush in the ceiling'}`,
       qty: gear.speakers.length,
-      note:
-        plan.speakerCoverage === 'dense'
-          ? 'Closer together, for even sound everywhere.'
-          : 'An even grid over the seating area.',
+      note: coverageNote[plan.speakerCoverage],
     });
   }
   if (plan.mics === 'ceiling')
@@ -1166,6 +1528,14 @@ export function analyze(plan: Plan): Analysis {
       note: plan.presenter ? 'The presenter takes one; a receiver sits in the rack.' : 'A receiver sits in the rack.',
     });
   if (plan.dsp) items.push({ name: 'Audio processor (echo cancellation and mixing)', qty: 1 });
+  const parts = gear.rack?.items ?? rackItems(plan, { networked: 0 });
+  const has = (text: string) => parts.some((i) => i.name.startsWith(text));
+  if (has('Power amplifier')) items.push({ name: 'Power amplifier', qty: 1, note: 'Drives the speakers.' });
+  if (has('Control processor')) items.push({ name: 'Control processor', qty: 1, note: 'Runs the touch panel.' });
+  if (has('Video switcher') || has('Video matrix'))
+    items.push({ name: has('Video matrix') ? 'Video matrix switcher' : 'Video switcher (HDMI and USB-C)', qty: 1 });
+  if (has('Video transmitter'))
+    items.push({ name: 'Video transmitter and receiver (a pair)', qty: 1, note: 'A long run to the display.' });
   if (needsSwitch(plan, gear))
     items.push({
       name: 'Network switch with PoE',
@@ -1212,6 +1582,34 @@ export function analyze(plan: Plan): Analysis {
           ? 'Runs on a room computer of its own.'
           : 'Runs on the video bar itself.',
   });
+  if (gear.pucks.length)
+    items.push({
+      name: 'Wireless sharing button for the table',
+      qty: gear.pucks.length,
+      note: 'Plugs into a laptop; a click shares the screen.',
+    });
+  if (gear.credenza)
+    items.push({
+      name: 'Cabinet for the wireless microphones',
+      qty: 1,
+      note: 'A small credenza with the charger; it can stand against any wall.',
+    });
+  if (gear.rack) {
+    const used = gear.rack.items.reduce((sum, i) => sum + i.u, 0);
+    items.push(
+      gear.rack.mode === 'behind'
+        ? {
+            name: 'Equipment box on the wall behind the display',
+            qty: 1,
+            note: `${used} units of equipment, hidden behind the display.`,
+          }
+        : {
+            name: `AV equipment rack, ${gear.rack.u} U`,
+            qty: 1,
+            note: gear.rack.outside ? 'Outside the room, location to be confirmed.' : 'In the room, against a wall.',
+          },
+    );
+  }
   items.push({ name: 'Installation, cabling, programming and commissioning', qty: 1 });
 
   const warnings: string[] = [];
@@ -1240,6 +1638,9 @@ export function analyze(plan: Plan): Analysis {
     warnings.push('A camera without microphones: remote people will see the room but not hear it.');
   if (plan.speakers === 'none' && plan.bar === 'none')
     warnings.push('No speakers: people in the room will not hear remote participants.');
+  if (gear.rack?.mode === 'behind' && gear.rack.items.reduce((sum, i) => sum + i.u, 0) > 6) {
+    warnings.push('There is more equipment than fits in a box behind the display. Put it in a rack in the room.');
+  }
   if (
     (plan.speakers === 'ceiling' || plan.speakers === 'both') &&
     plan.height - gear.speakerDrop > rules.speakerMaxHeight[plan.speakerSize]
@@ -1263,8 +1664,8 @@ export function analyze(plan: Plan): Analysis {
 // a camera of their own and wireless microphones.
 export const presetChoices: Record<RoomType, Record<Preset, Partial<Plan>>> = {
   huddle: {
-    essential: { bar: 'compact', control: 'table' },
-    standard: { bar: 'compact', control: 'table', sharing: 'cable', tablePanels: true },
+    essential: { bar: 'compact', control: 'table', rack: 'behind' },
+    standard: { bar: 'compact', control: 'table', sharing: 'cable', tablePanels: true, rack: 'behind' },
     premium: {
       bar: 'compact',
       engine: true,
@@ -1273,20 +1674,22 @@ export const presetChoices: Record<RoomType, Record<Preset, Partial<Plan>>> = {
       control: 'table',
       sharing: 'cable',
       tablePanels: true,
+      rack: 'behind',
     },
   },
   conference: {
-    essential: { bar: 'large', sharing: 'cable', tablePanels: true, control: 'table' },
+    essential: { bar: 'large', sharing: 'cable', tablePanels: true, control: 'table', rack: 'behind' },
     standard: {
       cameras: 'one',
       mics: 'ceiling',
       speakers: 'both',
-      speakerCoverage: 'standard',
+      speakerCoverage: 'basic',
       dsp: true,
       wireless: 2,
       sharing: 'cable',
       tablePanels: true,
       control: 'table',
+      rack: 'room',
     },
     premium: {
       displays: 2,
@@ -1295,12 +1698,13 @@ export const presetChoices: Record<RoomType, Record<Preset, Partial<Plan>>> = {
       presenter: true,
       mics: 'ceiling',
       speakers: 'both',
-      speakerCoverage: 'dense',
+      speakerCoverage: 'full',
       dsp: true,
       wireless: 4,
       sharing: 'both',
       tablePanels: true,
       control: 'table',
+      rack: 'room',
     },
   },
   boardroom: {
@@ -1312,6 +1716,7 @@ export const presetChoices: Record<RoomType, Record<Preset, Partial<Plan>>> = {
       sharing: 'cable',
       tablePanels: true,
       control: 'table',
+      rack: 'room',
     },
     standard: {
       displays: 2,
@@ -1319,12 +1724,13 @@ export const presetChoices: Record<RoomType, Record<Preset, Partial<Plan>>> = {
       presenter: true,
       mics: 'ceiling',
       speakers: 'both',
-      speakerCoverage: 'standard',
+      speakerCoverage: 'basic',
       dsp: true,
       wireless: 2,
       sharing: 'cable',
       tablePanels: true,
       control: 'table',
+      rack: 'room',
     },
     premium: {
       displays: 2,
@@ -1332,26 +1738,28 @@ export const presetChoices: Record<RoomType, Record<Preset, Partial<Plan>>> = {
       presenter: true,
       mics: 'ceiling',
       speakers: 'both',
-      speakerCoverage: 'dense',
+      speakerCoverage: 'good',
       dsp: true,
       wireless: 4,
       sharing: 'both',
       tablePanels: true,
       control: 'table',
+      rack: 'outside',
     },
   },
   training: {
-    essential: { bar: 'large', presenter: true, speakers: 'front', sharing: 'cable', control: 'wall' },
+    essential: { bar: 'large', presenter: true, speakers: 'front', sharing: 'cable', control: 'wall', rack: 'room' },
     standard: {
       cameras: 'one',
       presenter: true,
       mics: 'ceiling',
       speakers: 'both',
-      speakerCoverage: 'standard',
+      speakerCoverage: 'basic',
       dsp: true,
       wireless: 2,
       sharing: 'cable',
       control: 'wall',
+      rack: 'room',
     },
     premium: {
       displays: 2,
@@ -1359,11 +1767,12 @@ export const presetChoices: Record<RoomType, Record<Preset, Partial<Plan>>> = {
       presenter: true,
       mics: 'ceiling',
       speakers: 'both',
-      speakerCoverage: 'dense',
+      speakerCoverage: 'good',
       dsp: true,
       wireless: 4,
       sharing: 'both',
       control: 'wall',
+      rack: 'room',
     },
   },
 };
@@ -1379,21 +1788,21 @@ export const presetText: Record<RoomType, Record<Preset, string>> = {
     standard:
       'A camera above the display, ceiling microphone, wall and ceiling speakers, audio processor, two wireless microphones, table touch panel',
     premium:
-      'Two displays, cameras above and on both side walls, a presenter camera, dense ceiling audio, four wireless microphones, wireless sharing',
+      'Two displays, cameras above and on both side walls, a presenter camera, full ceiling audio, four wireless microphones, wireless sharing',
   },
   boardroom: {
     essential: 'One display, ceiling microphones, a camera and a presenter camera, wall speakers, touch panel',
     standard:
       'Two displays, two cameras beside them and a presenter camera, wall and ceiling speakers, audio processor, two wireless microphones',
     premium:
-      'Two displays, two cameras on each side of the display and a presenter camera, dense ceiling audio, four wireless microphones, wireless sharing',
+      'Two displays, two cameras on each side of the display and a presenter camera, good ceiling audio, four wireless microphones, wireless sharing, the rack outside the room',
   },
   training: {
     essential: 'A video bar, a presenter camera, wall speakers and a touch panel on the wall',
     standard:
       'A camera above the display and a presenter camera, ceiling microphones, wall and ceiling speakers, audio processor, two wireless microphones',
     premium:
-      'Two displays, two cameras and a presenter camera, dense ceiling audio, four wireless microphones, wireless sharing',
+      'Two displays, two cameras and a presenter camera, good ceiling audio, four wireless microphones, wireless sharing',
   },
 };
 
@@ -1411,7 +1820,7 @@ export function applyPreset(plan: Plan, preset: Preset): Plan {
 }
 // ---------------------------------------------------------------- ready-made rooms
 
-export type ScenarioId = 'huddle' | 'team' | 'boardroom' | 'classroom' | 'workshop' | 'roundtable';
+export type ScenarioId = 'huddle' | 'semi' | 'screen' | 'team' | 'boardroom' | 'classroom' | 'workshop' | 'roundtable';
 export type Scenario = {
   id: ScenarioId;
   label: string;
@@ -1430,6 +1839,33 @@ export const scenarios: Scenario[] = [
     type: 'huddle',
     preset: 'essential',
     changes: {},
+  },
+  {
+    id: 'semi',
+    label: 'Huddle with a semi-round table',
+    about:
+      'A small room with a half-round table against the display wall, five people around the curve, a video bar and a cable for laptops.',
+    type: 'huddle',
+    preset: 'standard',
+    changes: { shape: 'semi', seats: 5 },
+  },
+  {
+    id: 'screen',
+    label: 'Screen-share room',
+    about:
+      'The simplest room: a display with a cable to the table. Plug in a laptop and share, with the sound from the display.',
+    type: 'huddle',
+    preset: 'essential',
+    changes: {
+      bar: 'none',
+      engine: false,
+      system: 'byod',
+      speakers: 'display',
+      sharing: 'cable',
+      tablePanels: true,
+      control: 'none',
+      rack: 'behind',
+    },
   },
   {
     id: 'team',
@@ -1452,7 +1888,7 @@ export const scenarios: Scenario[] = [
     id: 'boardroom',
     label: 'Boardroom for twelve',
     about:
-      'A boat-shaped table, two displays, dense ceiling audio, two cameras on each side of the display and a presenter camera.',
+      'A boat-shaped table, two displays, good ceiling audio, two cameras on each side of the display and a presenter camera, the rack in its own room.',
     type: 'boardroom',
     preset: 'premium',
     changes: { seats: 12 },
@@ -1527,6 +1963,11 @@ const KEYS = [
   'speakerMount',
   'displayType',
   'whiteboard',
+  'rack',
+  'rackX',
+  'rackZ',
+  'credenzaX',
+  'credenzaZ',
 ] as const satisfies readonly (keyof Plan)[];
 
 export function encodePlan(plan: Plan): string {
@@ -1554,6 +1995,7 @@ const tableWord: Record<TableShape, string> = {
   boat: 'boat-shaped',
   round: 'round',
   u: 'U-shaped',
+  semi: 'semi-round',
 };
 
 const roomLine = (plan: Plan) =>

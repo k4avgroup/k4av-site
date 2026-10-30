@@ -8,18 +8,22 @@ import {
   computeLayout,
   decodePlan,
   defaultPlan,
+  coverageNote,
   displaySizes,
   encodePlan,
   formatLength,
   fromUnit,
   keepClear,
   limitsFor,
+  moveRack,
   normalizePlan,
   planSummary,
   presetText,
   roomTypes,
+  rules,
   scenarios,
   seatLimits,
+  snapToWall,
   tableShapes,
   toUnit,
   type Plan,
@@ -215,6 +219,23 @@ export default function RoomPlanner() {
       }),
     [],
   );
+  // the cabinet with the wireless microphones and the rack stand against a wall (the rack may also stand outside)
+  const moveCredenza = useCallback(
+    (x: number, z: number) =>
+      setPlan((p) => {
+        const s = snapToWall(p, x, z, rules.credenza.depth);
+        return normalizePlan({ ...p, credenzaX: s.x, credenzaZ: s.z });
+      }),
+    [],
+  );
+  const moveRackTo = useCallback(
+    (x: number, z: number) =>
+      setPlan((p) => {
+        const s = moveRack(p, x, z);
+        return normalizePlan({ ...p, rackX: s.x, rackZ: s.z });
+      }),
+    [],
+  );
   const onReady = useCallback((fn: Capture) => {
     capture.current = fn;
   }, []);
@@ -349,7 +370,7 @@ export default function RoomPlanner() {
               )}
               {shapes.length > 1 && <p className="planner-hint">{tableShapes[plan.shape].about}</p>}
               <Count label="Seats" value={plan.seats} min={minSeats} max={maxSeats} onChange={(n) => set('seats', n)} />
-              {plan.roomType !== 'training' && (
+              {plan.roomType !== 'training' && plan.shape !== 'semi' && (
                 <Seg
                   label="Table position"
                   value={plan.position}
@@ -369,6 +390,14 @@ export default function RoomPlanner() {
                     onChange={(v) => set('endChairs', v)}
                   />
                 )}
+              {plan.roomType === 'huddle' && plan.shape === 'rect' && (
+                <Check
+                  label="A chair at the end of the table, facing the display"
+                  checked={plan.endChairs}
+                  onChange={(v) => set('endChairs', v)}
+                  hint="Seats an extra person, so the table has people on three sides"
+                />
+              )}
               {plan.roomType !== 'huddle' && (
                 <Check label="Show a presenter" checked={plan.presenter} onChange={(v) => set('presenter', v)} />
               )}
@@ -505,7 +534,8 @@ export default function RoomPlanner() {
                 value={plan.speakers}
                 options={[
                   { value: 'none', label: plan.bar !== 'none' ? 'Bar only' : 'None' },
-                  { value: 'front', label: 'Wall pair' },
+                  { value: 'display', label: 'In the display' },
+                  { value: 'front', label: 'Slim wall pair' },
                   ...(plan.roomType === 'huddle'
                     ? []
                     : [
@@ -541,8 +571,9 @@ export default function RoomPlanner() {
                     label="Ceiling speaker coverage"
                     value={plan.speakerCoverage}
                     options={[
-                      { value: 'standard', label: 'Standard' },
-                      { value: 'dense', label: 'Dense' },
+                      { value: 'basic', label: 'Basic' },
+                      { value: 'good', label: 'Good' },
+                      { value: 'full', label: 'Full' },
                     ]}
                     onChange={(v) => set('speakerCoverage', v)}
                   />
@@ -613,7 +644,7 @@ export default function RoomPlanner() {
               )}
               <p className="planner-hint">
                 {gear.speakers.length > 0 &&
-                  `${gear.speakers.length} ceiling speakers, ${plan.speakerCoverage === 'dense' ? 'close together for even sound' : 'an even grid over the seats'}. `}
+                  `${gear.speakers.length} ceiling speakers. ${coverageNote[plan.speakerCoverage]} `}
                 {(plan.mics === 'ceiling' || plan.mics === 'pendant') &&
                   `${gear.mics.length} microphone array${gear.mics.length > 1 ? 's' : ''}, ${plan.micShape === 'round' ? 'round 25 in (635 mm)' : 'square 24 in (604 mm)'}, sized like the Shure MXA920. `}
                 {plan.mics === 'table' && `${gear.mics.length} table microphone${gear.mics.length > 1 ? 's' : ''}. `}
@@ -786,6 +817,29 @@ export default function RoomPlanner() {
                 ]}
                 onChange={(v) => set('system', v)}
               />
+              <Seg
+                label="Where the equipment is"
+                value={plan.rack}
+                options={[
+                  { value: 'none', label: 'Not shown' },
+                  { value: 'behind', label: 'Behind the display' },
+                  { value: 'room', label: 'Rack in the room' },
+                  { value: 'outside', label: 'Rack outside' },
+                ]}
+                onChange={(v) => setPlan((p) => normalizePlan({ ...p, rack: v, rackX: null, rackZ: null }))}
+              />
+              <p className="planner-hint">
+                {plan.rack === 'behind' &&
+                  'The equipment sits in a box on the wall behind the display; turn the room around to see it.'}
+                {plan.rack === 'room' && 'A rack stands against a wall. Drag it in the 3D view to another wall.'}
+                {plan.rack === 'outside' &&
+                  'The rack stands outside the room, location to be confirmed. Drag it to another side.'}
+                {plan.rack !== 'none' && gear.rack
+                  ? ` ${gear.rack.items.length} devices: ${gear.rack.items.map((i) => i.name.replace(/ \(.*\)$/, '').toLowerCase()).join(', ')}.`
+                  : ''}
+                {(plan.sharing === 'cable' || plan.sharing === 'both' || plan.control === 'table') &&
+                  ' Dashed lines are the cables from the table.'}
+              </p>
             </>
           )}
 
@@ -876,6 +930,8 @@ export default function RoomPlanner() {
           view={view}
           onReady={onReady}
           onPresenterMove={movePresenter}
+          onCredenzaMove={moveCredenza}
+          onRackMove={moveRackTo}
         />
         <div className="planner-views" role="group" aria-label="Camera view">
           <button type="button" onClick={() => show('iso')}>

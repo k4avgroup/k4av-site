@@ -147,7 +147,7 @@ test('a video bar is the front camera, so it replaces the cameras at the display
   const bottom = below.displays.centerY - below.displays.height / 2;
   assert.ok((above.gear.bar?.pos[1] ?? 0) > top, 'above the display');
   assert.ok((below.gear.bar?.pos[1] ?? 9) < bottom, 'below the display');
-  assert.ok(below.displays.centerY > above.displays.centerY, 'the display is raised to make room');
+  assert.equal(below.displays.centerY, above.displays.centerY, 'the display stays; the bar moves');
   assert.equal(analyze(plan({ bar: 'compact' })).gear.bar?.width, rules.bar.compact.width);
   assert.equal(analyze(plan({ bar: 'large' })).gear.bar?.width, rules.bar.large.width);
   assert.equal(plan({ bar: 'giant' }).bar, 'none');
@@ -418,7 +418,8 @@ test('the signal flow follows the new devices', () => {
   assert.ok(title('wallSpeakers').includes('wall') && title('speakers').includes('ceiling'));
   assert.ok(nodes.find((n) => n.id === 'speakers')?.detail?.includes('cords'));
   assert.ok(links.some((l) => l.from === 'tableCamera' && l.to === 'system'));
-  assert.ok(links.some((l) => l.from === 'processor' && l.to === 'wallSpeakers' && l.analog));
+  assert.ok(links.some((l) => l.from === 'amp' && l.to === 'wallSpeakers' && l.analog));
+  assert.ok(links.some((l) => l.from === 'processor' && l.to === 'amp' && l.analog));
   const led = plan({ displayType: 'led' });
   assert.ok(
     signalFlow(led, analyze(led))

@@ -1,4 +1,12 @@
-import { needsSwitch, ptzCameras, speakerSizeLabel, type Analysis, type Plan, type RoomSystem } from './model.ts';
+import {
+  needsSwitch,
+  ptzCameras,
+  rackItems,
+  speakerSizeLabel,
+  type Analysis,
+  type Plan,
+  type RoomSystem,
+} from './model.ts';
 
 // Short names, so the titles fit their boxes.
 const systemTitle: Record<RoomSystem, string> = {
@@ -18,12 +26,25 @@ const platform: Record<RoomSystem, string> = {
 
 // A signal flow sketch: what connects to what, with which kind of signal and cable. Cables have no direction here.
 // Colour tells what travels (video, audio, control); a dashed line is analog, a solid one is digital or network.
-export type Signal = 'video' | 'audio' | 'control';
+export type Signal = 'video' | 'audio' | 'control' | 'power';
 export type FlowNode = { id: string; column: 0 | 1 | 2 | 3; title: string; detail?: string };
 export type FlowLink = { from: string; to: string; label: string; signal: Signal; analog: boolean };
 export type Flow = { nodes: FlowNode[]; links: FlowLink[] };
 
-export const signalNames: Record<Signal, string> = { video: 'Video', audio: 'Audio', control: 'Control' };
+export const signalNames: Record<Signal, string> = {
+  video: 'Video',
+  audio: 'Audio',
+  control: 'Control',
+  power: 'Power',
+};
+
+// Only the links that carry one kind of signal, and the boxes they join: a flow of video, of audio, of control or of power.
+export function filterFlow(flow: Flow, signal: Signal | 'all'): Flow {
+  if (signal === 'all') return flow;
+  const links = flow.links.filter((l) => l.signal === signal);
+  const used = new Set(links.flatMap((l) => [l.from, l.to]));
+  return { nodes: flow.nodes.filter((n) => used.has(n.id)), links };
+}
 
 const many = (n: number, word: string) => `${n}× ${word}${n > 1 ? 's' : ''}`;
 
@@ -36,6 +57,9 @@ export function signalFlow(plan: Plan, a: Analysis): Flow {
   const link = (from: string, to: string, label: string, signal: Signal, analog = false) => {
     if (has(from) && has(to)) links.push({ from, to, label, signal, analog });
   };
+
+  const parts = gear.rack?.items ?? rackItems(plan, { networked: gear.mics.length + ptzCameras(gear).length });
+  const inRack = (text: string) => parts.some((i) => i.name.startsWith(text));
 
   // A video bar that runs the meeting platform by itself is the room system; next to a room computer it is a device
   // of the room, with the camera, microphones and speakers inside it.
@@ -85,6 +109,7 @@ export function signalFlow(plan: Plan, a: Analysis): Flow {
       detail: plan.tablePanels ? many(gear.panels.length, 'connection panel') : undefined,
     });
   }
+  nodes.push({ id: 'pdu', column: 0, title: 'Power distribution', detail: 'mains, in the rack' });
   if (plan.control !== 'none') {
     nodes.push({
       id: 'touch',
@@ -98,6 +123,16 @@ export function signalFlow(plan: Plan, a: Analysis): Flow {
   if (needsSwitch(plan, gear))
     nodes.push({ id: 'switch', column: 1, title: 'PoE network switch', detail: 'power and data' });
   if (plan.dsp) nodes.push({ id: 'processor', column: 1, title: 'Audio processor', detail: 'echo control, mixing' });
+  if (inRack('Video switcher') || inRack('Video matrix')) {
+    nodes.push({
+      id: 'vswitch',
+      column: 1,
+      title: inRack('Video matrix') ? 'Video matrix switcher' : 'Video switcher',
+    });
+  }
+  if (inRack('Control processor'))
+    nodes.push({ id: 'controller', column: 1, title: 'Control processor', detail: 'runs the touch panel' });
+  const amp = plan.dsp && (plan.speakers === 'front' || plan.speakers === 'ceiling' || plan.speakers === 'both');
   if (plan.sharing === 'wireless' || plan.sharing === 'both') {
     nodes.push({ id: 'gateway', column: 1, title: 'Wireless sharing', detail: 'presentation gateway' });
   }
@@ -112,6 +147,7 @@ export function signalFlow(plan: Plan, a: Analysis): Flow {
         },
   );
 
+  if (amp) nodes.push({ id: 'amp', column: 2, title: 'Power amplifier', detail: 'drives the speakers' });
   const unit = displays.count === 1 ? '' : 's';
   if (plan.displayType === 'led') {
     nodes.push({ id: 'displays', column: 3, title: `LED wall, ${displays.size}"` });
@@ -166,14 +202,46 @@ export function signalFlow(plan: Plan, a: Analysis): Flow {
     link('mics', 'system', networked ? 'network audio' : 'audio', 'audio', !networked);
     link('wireless', 'system', 'audio', 'audio', true);
   }
-  // speakers hang on the processor, or on the room system if there is none, with an analog line
-  const feed = plan.dsp ? 'processor' : 'system';
-  link(feed, 'wallSpeakers', 'audio', 'audio', true);
-  link(feed, 'speakers', 'audio', 'audio', true);
-  link('laptops', 'system', 'HDMI / USB-C', 'video');
+  // speakers hang on the amplifier fed by the processor, or on the room system if there is no processor
+  if (amp) {
+    link('processor', 'amp', 'line out', 'audio', true);
+    link('amp', 'wallSpeakers', 'speaker cable', 'audio', true);
+    link('amp', 'speakers', '70 V loop', 'audio', true);
+  } else {
+    link('system', 'wallSpeakers', 'audio', 'audio', true);
+    link('system', 'speakers', 'audio', 'audio', true);
+  }
+  if (has('vswitch')) {
+    link('laptops', 'vswitch', 'HDMI / USB-C', 'video');
+    link('vswitch', 'system', 'HDMI / USB', 'video');
+  } else {
+    link('laptops', 'system', 'HDMI / USB-C', 'video');
+  }
   link('gateway', 'displays', 'HDMI', 'video');
-  link('touch', 'system', 'USB / net', 'control');
+  if (has('controller')) {
+    link('touch', 'controller', 'network', 'control');
+    link('controller', 'system', 'USB / net', 'control');
+    link('controller', 'displays', 'display control', 'control');
+  } else {
+    link('touch', 'system', 'USB / net', 'control');
+  }
   link('system', 'displays', 'HDMI', 'video');
   link('system', 'whiteboard', 'HDMI / USB', 'video');
+
+  // power: the mains through the distribution unit, and PoE from the switch to the cameras and microphones
+  link('cameras', 'switch', 'PoE power', 'power');
+  if (plan.mics === 'ceiling' || plan.mics === 'pendant') link('mics', 'switch', 'PoE power', 'power');
+  for (const [id, label] of [
+    ['system', 'mains'],
+    ['switch', 'mains'],
+    ['processor', 'mains'],
+    ['vswitch', 'mains'],
+    ['controller', 'mains'],
+    ['gateway', 'mains'],
+    ['amp', 'mains'],
+    ['displays', 'mains'],
+  ] as const) {
+    link('pdu', id, label, 'power');
+  }
   return { nodes, links };
 }

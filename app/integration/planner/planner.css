@@ -460,6 +460,30 @@
 .planner-flow .flow-control {
   stroke: #ffb703;
 }
+.planner-flow .flow-power {
+  stroke: #ff6b6b;
+}
+.planner-flow-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.planner-flow-tabs button {
+  padding: 6px 12px;
+  border: 1px solid #3b4654;
+  border-radius: 8px;
+  background: #1d242d;
+  color: #e6ebf1;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.planner-flow-tabs button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
 .planner-flow .flow-neutral {
   stroke: #98a4b3;
 }

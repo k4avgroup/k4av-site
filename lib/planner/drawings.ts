@@ -154,6 +154,19 @@ function wedge(
   X: (x: number) => number,
   Y: (z: number) => number,
 ) {
+  // a camera that looks all round (a table camera) has a circle of view, cut off at the walls
+  if (cam.hfov >= 360) {
+    const ring: [number, number][] = [];
+    for (let i = 0; i < 36; i++) {
+      const a = (i / 36) * 2 * Math.PI;
+      ring.push([
+        X(Math.min(plan.width / 2, Math.max(-plan.width / 2, cam.pos[0] + Math.sin(a) * 3))),
+        Y(Math.min(plan.length / 2, Math.max(-plan.length / 2, cam.pos[2] + Math.cos(a) * 3))),
+      ]);
+    }
+    g.poly(ring, 'fov');
+    return;
+  }
   const dx = cam.target[0] - cam.pos[0];
   const dz = cam.target[2] - cam.pos[2];
   const reach = Math.min(Math.hypot(dx, dz), 6);
@@ -196,6 +209,17 @@ function planBase(plan: Plan, a: Analysis, ceiling: boolean, opts: DrawingOption
   const chair = 0.45 * s;
   // a round table is a circle, a boat-shaped one a rectangle with half-round ends
   const tableShape = (t: Analysis['layout']['tables'][number], style: 'ref' | 'furniture') => {
+    if (t.shape === 'semi') {
+      // half a disc, its flat side on the display wall
+      const wall = t.z - t.length / 2;
+      const arc: [number, number][] = [];
+      for (let i = 0; i <= 24; i++) {
+        const a = -Math.PI / 2 + (i / 24) * Math.PI;
+        arc.push([X(t.x + Math.sin(a) * t.length), Y(wall + Math.cos(a) * t.length)]);
+      }
+      g.poly(arc, style);
+      return;
+    }
     if (t.shape === 'round') g.circle(X(t.x), Y(t.z), (t.width / 2) * s, style);
     else
       g.rect(

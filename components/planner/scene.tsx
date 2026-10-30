@@ -1,13 +1,16 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import {
   BufferGeometry,
   CanvasTexture,
+  CatmullRomCurve3,
   DoubleSide,
   EdgesGeometry,
   ExtrudeGeometry,
   Float32BufferAttribute,
+  Line,
+  LineDashedMaterial,
   Matrix4,
   type Mesh,
   MOUSE,
@@ -19,11 +22,12 @@ import {
   Shape,
   SRGBColorSpace,
   TOUCH,
+  TubeGeometry,
   Vector2,
   Vector3,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import type { Analysis, CameraSpec, Plan, Vec3 } from '@/lib/planner/model';
+import type { Analysis, Cable, CameraSpec, Plan, RackKind, RoomSystem, Vec3 } from '@/lib/planner/model';
 import { presenterRange, presenterSpot, rules } from '@/lib/planner/model';
 
 export type ViewName = 'iso' | 'top' | 'front' | 'side';
@@ -32,8 +36,23 @@ export type Capture = () => Promise<Blob | null>;
 
 const COLORS = { speaker: '#3ddc84', mic: '#4cc9f0', camera: '#ffb703', plane: '#3a86ff' };
 
-export function viewPose(plan: Pick<Plan, 'length' | 'width' | 'height'>, name: ViewName) {
-  const R = Math.max(plan.length, plan.width);
+// Sound, voices and what the cameras see stop at the walls: their materials are clipped to the room box.
+const ClipContext = createContext<Plane[]>([]);
+function Clipped({ color, opacity }: { color: string; opacity: number }) {
+  const clip = useContext(ClipContext);
+  return (
+    <meshBasicMaterial
+      color={color}
+      transparent
+      opacity={opacity}
+      side={DoubleSide}
+      depthWrite={false}
+      clippingPlanes={clip}
+    />
+  );
+}
+export function viewPose(plan: Pick<Plan, 'length' | 'width' | 'height' | 'rack'>, name: ViewName) {
+  const R = Math.max(plan.length, plan.width + (plan.rack === 'outside' ? 3 : 0));
   const H = plan.height;
   const poses: Record<ViewName, { position: Vec3; target: Vec3 }> = {
     top: { position: [0, R * 1.5 + H, 0.001], target: [0, 0, 0] },
@@ -113,7 +132,7 @@ function Controls({ plan, view }: { plan: Plan; view: ViewState }) {
     c.target.set(...pose.target);
     c.update();
     invalidate();
-  }, [plan.length, plan.width, plan.height, view.name, camera, invalidate]);
+  }, [plan.length, plan.width, plan.height, plan.rack, view.name, camera, invalidate]);
 
   return null;
 }
@@ -135,8 +154,56 @@ function CaptureBridge({ onReady }: { onReady: (capture: Capture) => void }) {
   return null;
 }
 
-// What the display shows: a video call with two remote people, a small self view and the logo in the corner.
-function drawScreen(canvas: HTMLCanvasElement, logo: HTMLImageElement | null) {
+// The badge of the meeting platform in the corner of the display: nothing for a bring-your-own-device room.
+const BADGES: Record<
+  Exclude<RoomSystem, 'byod'>,
+  { name: string; colour: string; ink: string; glyph: 'T' | 'W' | 'camera' }
+> = {
+  teams: { name: 'Microsoft Teams', colour: '#5059C9', ink: '#ffffff', glyph: 'T' },
+  zoom: { name: 'Zoom', colour: '#0B5CFF', ink: '#ffffff', glyph: 'camera' },
+  webex: { name: 'Webex', colour: '#00A86B', ink: '#ffffff', glyph: 'W' },
+  meet: { name: 'Google Meet', colour: '#ffffff', ink: '#00832d', glyph: 'camera' },
+};
+
+function drawBadge(g: CanvasRenderingContext2D, system: RoomSystem) {
+  if (system === 'byod') return;
+  const b = BADGES[system];
+  const x = 56;
+  const y = 56;
+  const s = 112;
+  g.fillStyle = b.colour;
+  g.beginPath();
+  g.roundRect(x, y, s, s, 24);
+  g.fill();
+  g.fillStyle = b.ink;
+  if (b.glyph === 'camera') {
+    g.beginPath();
+    g.roundRect(x + 22, y + 36, 46, 40, 8);
+    g.fill();
+    g.beginPath();
+    g.moveTo(x + 72, y + 50);
+    g.lineTo(x + 92, y + 38);
+    g.lineTo(x + 92, y + 74);
+    g.lineTo(x + 72, y + 62);
+    g.closePath();
+    g.fill();
+  } else {
+    g.font = 'bold 76px Arial, sans-serif';
+    g.textAlign = 'center';
+    g.fillText(b.glyph, x + s / 2, y + 82);
+    g.textAlign = 'start';
+  }
+  g.font = 'bold 30px Arial, sans-serif';
+  g.fillStyle = '#ffffff';
+  g.shadowColor = 'rgba(0,0,0,0.7)';
+  g.shadowBlur = 6;
+  g.fillText(b.name, x + s + 18, y + 70);
+  g.shadowBlur = 0;
+}
+
+// What the display shows: a video call with two remote people, a small self view, the logo in the corner and the badge
+// of the meeting platform.
+function drawScreen(canvas: HTMLCanvasElement, logo: HTMLImageElement | null, system: RoomSystem) {
   const g = canvas.getContext('2d');
   if (!g) return;
   const W = canvas.width;
@@ -185,23 +252,25 @@ function drawScreen(canvas: HTMLCanvasElement, logo: HTMLImageElement | null) {
     g.font = 'bold 34px Arial, sans-serif';
     g.fillText('K4 AV Group', 40, H - 36);
   }
+  drawBadge(g, system);
 }
 
-function useScreenTexture() {
+function useScreenTexture(system: RoomSystem) {
   const invalidate = useThree((s) => s.invalidate);
+  // a new picture for each platform: its badge is part of the screen
   const texture = useMemo(() => {
     const canvas = document.createElement('canvas');
     canvas.width = 1280;
     canvas.height = 720;
-    drawScreen(canvas, null);
+    drawScreen(canvas, null, system);
     const t = new CanvasTexture(canvas);
     t.colorSpace = SRGBColorSpace;
     return t;
-  }, []);
+  }, [system]);
   useEffect(() => {
     const img = new Image();
     img.onload = () => {
-      drawScreen(texture.image as HTMLCanvasElement, img);
+      drawScreen(texture.image as HTMLCanvasElement, img, system);
       texture.needsUpdate = true;
       invalidate();
     };
@@ -209,7 +278,7 @@ function useScreenTexture() {
     return () => {
       img.onload = null;
     };
-  }, [texture, invalidate]);
+  }, [texture, system, invalidate]);
   useEffect(() => () => texture.dispose(), [texture]);
   return texture;
 }
@@ -359,6 +428,25 @@ function BoatTable({ table, wood }: { table: Analysis['layout']['table']; wood: 
 function Table({ table }: { table: Analysis['layout']['table'] }) {
   const wood = '#b98b62';
   if (table.shape === 'boat') return <BoatTable table={table} wood={wood} />;
+  if (table.shape === 'semi') {
+    const r = table.length;
+    return (
+      <group position={[table.x, 0, table.z - r / 2]}>
+        <mesh position={[0, 0.74, 0]}>
+          <cylinderGeometry args={[r, r, 0.04, 48, 1, false, -Math.PI / 2, Math.PI]} />
+          <meshStandardMaterial color={wood} />
+        </mesh>
+        <mesh position={[0, 0.37, r * 0.45]}>
+          <cylinderGeometry args={[0.08, 0.08, 0.74, 12]} />
+          <meshStandardMaterial color="#222831" />
+        </mesh>
+        <mesh position={[0, 0.01, r * 0.45]}>
+          <cylinderGeometry args={[0.4, 0.4, 0.02, 24]} />
+          <meshStandardMaterial color="#222831" />
+        </mesh>
+      </group>
+    );
+  }
   if (table.shape === 'round') {
     return (
       <group position={[table.x, 0, table.z]}>
@@ -424,24 +512,30 @@ function Display({
   );
 }
 
-// A person who can be dragged across the floor. While they are held, the camera controls step aside.
-function Presenter({
+// Something that can be dragged across the floor: the presenter, the cabinet with the microphones, the rack. While it
+// is held, the camera controls step aside. `bounds` is how far it may go; the owner snaps it to a wall if it wants to.
+function Draggable({
   x,
   z,
-  size,
+  bounds,
   onMove,
+  hitRadius = 0.36,
+  hitHeight = 1.9,
+  children,
 }: {
   x: number;
   z: number;
-  size: { width: number; length: number };
+  bounds: { x: readonly [number, number]; z: readonly [number, number] };
   onMove: (x: number, z: number) => void;
+  hitRadius?: number;
+  hitHeight?: number;
+  children: (lit: boolean) => ReactNode;
 }) {
   const { camera, gl, get } = useThree();
   const [hover, setHover] = useState(false);
   const [held, setHeld] = useState(false);
   const stopDrag = useRef<(() => void) | null>(null);
   const plane = useMemo(() => new Plane(new Vector3(0, 1, 0), 0), []);
-  const range = presenterRange(size.width, size.length);
 
   useEffect(
     () => () => {
@@ -470,8 +564,8 @@ function Presenter({
       const p = floor(ev);
       if (p)
         onMove(
-          Math.min(range.x[1], Math.max(range.x[0], p.x + dx)),
-          Math.min(range.z[1], Math.max(range.z[0], p.z + dz)),
+          Math.min(bounds.x[1], Math.max(bounds.x[0], p.x + dx)),
+          Math.min(bounds.z[1], Math.max(bounds.z[0], p.z + dz)),
         );
     };
     const end = () => {
@@ -492,7 +586,6 @@ function Presenter({
     setHeld(true);
   };
 
-  const lit = hover || held;
   return (
     <group
       position={[x, 0, z]}
@@ -507,31 +600,55 @@ function Presenter({
         if (!stopDrag.current) get().gl.domElement.style.cursor = '';
       }}
     >
-      <mesh position={[0, 0.95, 0]}>
-        <cylinderGeometry args={[0.36, 0.36, 1.9, 14]} />
+      <mesh position={[0, hitHeight / 2, 0]}>
+        <cylinderGeometry args={[hitRadius, hitRadius, hitHeight, 14]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.3, 0.37, 40]} />
-        <meshBasicMaterial
-          color="#6aa5ff"
-          transparent
-          opacity={lit ? 0.95 : 0.5}
-          side={DoubleSide}
-          depthWrite={false}
-        />
-      </mesh>
-      <mesh position={[0, 0.82, 0]}>
-        <capsuleGeometry args={[0.18, 0.9, 6, 12]} />
-        <meshStandardMaterial color={lit ? '#6aa5ff' : '#3a86ff'} />
-      </mesh>
-      <mesh position={[0, 1.6, 0]}>
-        <sphereGeometry args={[0.12, 16, 12]} />
-        <meshStandardMaterial color="#e6c3a3" />
-      </mesh>
+      {children(hover || held)}
     </group>
   );
 }
+
+// A person who can be dragged across the floor.
+function Presenter({
+  x,
+  z,
+  size,
+  onMove,
+}: {
+  x: number;
+  z: number;
+  size: { width: number; length: number };
+  onMove: (x: number, z: number) => void;
+}) {
+  return (
+    <Draggable x={x} z={z} bounds={presenterRange(size.width, size.length)} onMove={onMove}>
+      {(lit) => (
+        <>
+          <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[0.3, 0.37, 40]} />
+            <meshBasicMaterial
+              color="#6aa5ff"
+              transparent
+              opacity={lit ? 0.95 : 0.5}
+              side={DoubleSide}
+              depthWrite={false}
+            />
+          </mesh>
+          <mesh position={[0, 0.82, 0]}>
+            <capsuleGeometry args={[0.18, 0.9, 6, 12]} />
+            <meshStandardMaterial color={lit ? '#6aa5ff' : '#3a86ff'} />
+          </mesh>
+          <mesh position={[0, 1.6, 0]}>
+            <sphereGeometry args={[0.12, 16, 12]} />
+            <meshStandardMaterial color="#e6c3a3" />
+          </mesh>
+        </>
+      )}
+    </Draggable>
+  );
+}
+
 // A ceiling microphone array hanging flush with the ceiling, sized like the Shure MXA920 (square or round).
 function MicArray({ position, shape }: { position: Vec3; shape: Plan['micShape'] }) {
   const { size, depth } = rules.micArray[shape];
@@ -596,7 +713,7 @@ function ConeVolume({
   return (
     <mesh position={position} quaternion={quaternion}>
       <coneGeometry args={[radius, length, 40, 1, true]} />
-      <meshBasicMaterial color={color} transparent opacity={opacity} side={DoubleSide} depthWrite={false} />
+      <Clipped color={color} opacity={opacity} />
     </mesh>
   );
 }
@@ -615,7 +732,7 @@ function Disc({
   return (
     <mesh position={position} rotation={[-Math.PI / 2, 0, 0]}>
       <circleGeometry args={[radius, 48]} />
-      <meshBasicMaterial color={color} transparent opacity={opacity} side={DoubleSide} depthWrite={false} />
+      <Clipped color={color} opacity={opacity} />
     </mesh>
   );
 }
@@ -688,7 +805,7 @@ function CameraBody({
   const view = showView && (
     <group quaternion={quaternion}>
       <mesh geometry={geometry}>
-        <meshBasicMaterial color={COLORS.camera} transparent opacity={0.07} side={DoubleSide} depthWrite={false} />
+        <Clipped color={COLORS.camera} opacity={0.07} />
       </mesh>
       <lineSegments geometry={edges}>
         <lineBasicMaterial color={COLORS.camera} transparent opacity={0.55} />
@@ -697,7 +814,7 @@ function CameraBody({
   );
   // a video bar draws itself; only what its camera sees belongs here
   if (cam.kind === 'bar') return <group position={cam.pos}>{view}</group>;
-  // a small round camera standing on the table
+  // a small round camera standing on the table: four lenses, so it sees all round
   if (cam.kind === 'table') {
     return (
       <group position={cam.pos}>
@@ -705,13 +822,20 @@ function CameraBody({
           <cylinderGeometry args={[0.05, 0.05, 0.2, 28]} />
           <meshStandardMaterial color="#2b3038" roughness={0.6} />
         </mesh>
-        <group rotation={[0, yaw, 0]}>
-          <mesh position={[0, 0.04, 0.047]}>
-            <boxGeometry args={[0.07, 0.05, 0.01]} />
-            <meshStandardMaterial color="#05070b" roughness={0.2} metalness={0.6} />
+        {[0, 1, 2, 3].map((k) => (
+          <group key={k} rotation={[0, (k * Math.PI) / 2, 0]}>
+            <mesh position={[0, 0.04, 0.047]}>
+              <boxGeometry args={[0.04, 0.04, 0.01]} />
+              <meshStandardMaterial color="#05070b" roughness={0.2} metalness={0.6} />
+            </mesh>
+          </group>
+        ))}
+        {showView && (
+          <mesh position={[0, 0.25, 0]}>
+            <cylinderGeometry args={[3, 3, 1.1, 48, 1, true]} />
+            <Clipped color={COLORS.camera} opacity={0.16} />
           </mesh>
-        </group>
-        {view}
+        )}
       </group>
     );
   }
@@ -837,38 +961,269 @@ function PendantSpeaker({ position, radius, ceiling }: { position: Vec3; radius:
   );
 }
 
+const RACK_COLOURS: Record<RackKind, string> = {
+  control: '#ffb703',
+  video: '#4f8cff',
+  audio: '#3ddc84',
+  network: '#9aa5b1',
+  compute: '#c7cdd6',
+  laptop: '#e8dcc6',
+  power: '#ff6b6b',
+  blank: '#2c333c',
+};
+const CABLE_COLOURS: Record<Cable['kind'], string> = { laptop: '#6aa5ff', control: '#ffb703', display: '#6aa5ff' };
+
+// A label that always faces the viewer, for things that are not in the room (the rack outside it).
+function Label({ text, position }: { text: string; position: Vec3 }) {
+  const texture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 72;
+    const g = canvas.getContext('2d');
+    if (g) {
+      g.fillStyle = 'rgba(20,24,30,0.85)';
+      g.beginPath();
+      g.roundRect(2, 2, 508, 68, 14);
+      g.fill();
+      g.fillStyle = '#e8eef5';
+      g.font = 'bold 32px Arial, sans-serif';
+      g.textAlign = 'center';
+      g.fillText(text, 256, 47);
+    }
+    const t = new CanvasTexture(canvas);
+    t.colorSpace = SRGBColorSpace;
+    return t;
+  }, [text]);
+  useEffect(() => () => texture.dispose(), [texture]);
+  return (
+    <sprite position={position} scale={[1.7, 0.24, 1]}>
+      <spriteMaterial map={texture} transparent depthTest={false} />
+    </sprite>
+  );
+}
+
+// A cable run, dashed, as if under the floor: furniture in front of it hides it.
+function CableLine({ points, color }: { points: Vec3[]; color: string }) {
+  const line = useMemo(() => {
+    const geometry = new BufferGeometry().setFromPoints(points.map((p) => new Vector3(...p)));
+    const l = new Line(geometry, new LineDashedMaterial({ color, dashSize: 0.07, gapSize: 0.05 }));
+    l.computeLineDistances();
+    return l;
+  }, [points, color]);
+  useEffect(
+    () => () => {
+      line.geometry.dispose();
+      (line.material as LineDashedMaterial).dispose();
+    },
+    [line],
+  );
+  return <primitive object={line} />;
+}
+
+// A laptop cable lying on the table: it leaves the panel, makes a half-round loop and ends in a plug.
+function TableCable({ position }: { position: Vec3 }) {
+  const geometry = useMemo(() => {
+    const curve = new CatmullRomCurve3([
+      new Vector3(0, 0, 0),
+      new Vector3(0.07, 0, 0.1),
+      new Vector3(0.19, 0, 0.17),
+      new Vector3(0.31, 0, 0.1),
+      new Vector3(0.37, 0, -0.02),
+    ]);
+    return new TubeGeometry(curve, 24, 0.006, 6, false);
+  }, []);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  return (
+    <group position={[position[0], position[1] + 0.012, position[2]]}>
+      <mesh geometry={geometry}>
+        <meshStandardMaterial color="#1d2733" />
+      </mesh>
+      <mesh position={[0.37, 0, -0.04]}>
+        <boxGeometry args={[0.03, 0.012, 0.045]} />
+        <meshStandardMaterial color="#8d97a3" />
+      </mesh>
+    </group>
+  );
+}
+
+// A wireless sharing button on the table: a small puck with a ring of light.
+function Puck({ position }: { position: Vec3 }) {
+  return (
+    <group position={position}>
+      <mesh>
+        <cylinderGeometry args={[0.05, 0.055, 0.02, 24]} />
+        <meshStandardMaterial color="#f2f4f6" />
+      </mesh>
+      <mesh position={[0, 0.011, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.025, 0.036, 24]} />
+        <meshBasicMaterial color="#4f8cff" />
+      </mesh>
+    </group>
+  );
+}
+
+// A table microphone: a light puck with a dark top and a ring of light, so it reads as a microphone on the table.
+function TableMic({ position }: { position: Vec3 }) {
+  return (
+    <group position={position}>
+      <mesh>
+        <cylinderGeometry args={[0.075, 0.08, 0.03, 28]} />
+        <meshStandardMaterial color="#e6e9ee" />
+      </mesh>
+      <mesh position={[0, 0.016, 0]}>
+        <cylinderGeometry args={[0.05, 0.05, 0.004, 24]} />
+        <meshStandardMaterial color="#2b3038" />
+      </mesh>
+      <mesh position={[0, 0.018, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.056, 0.066, 28]} />
+        <meshBasicMaterial color="#3ddc84" />
+      </mesh>
+    </group>
+  );
+}
+
+// The cabinet for the wireless microphones: a charger on top, with the handhelds and lapels in it.
+function Credenza({ credenza }: { credenza: NonNullable<Analysis['gear']['credenza']> }) {
+  const c = rules.credenza;
+  const n = credenza.mics.length;
+  return (
+    <group rotation={[0, credenza.rot, 0]}>
+      <mesh position={[0, c.height / 2, 0]}>
+        <boxGeometry args={[c.width, c.height, c.depth]} />
+        <meshStandardMaterial color="#8a6f55" />
+      </mesh>
+      <mesh position={[0, c.height + 0.015, 0]}>
+        <boxGeometry args={[c.width, 0.03, c.depth + 0.02]} />
+        <meshStandardMaterial color="#6c5540" />
+      </mesh>
+      <mesh position={[0, c.height + 0.06, 0]}>
+        <boxGeometry args={[0.6, 0.06, 0.24]} />
+        <meshStandardMaterial color="#1b2027" />
+      </mesh>
+      {credenza.mics.map((kind, i) => {
+        const x = (i - (n - 1) / 2) * 0.13;
+        return kind === 'handheld' ? (
+          <group key={i} position={[x, c.height + 0.09, 0.02]}>
+            <mesh position={[0, 0.1, 0]}>
+              <cylinderGeometry args={[0.017, 0.015, 0.2, 12]} />
+              <meshStandardMaterial color="#c9ced6" />
+            </mesh>
+            <mesh position={[0, 0.22, 0]}>
+              <sphereGeometry args={[0.032, 14, 10]} />
+              <meshStandardMaterial color="#2b3038" />
+            </mesh>
+          </group>
+        ) : (
+          <group key={i} position={[x, c.height + 0.09, 0.02]}>
+            <mesh position={[0, 0.045, 0]}>
+              <boxGeometry args={[0.05, 0.09, 0.016]} />
+              <meshStandardMaterial color="#2b3038" />
+            </mesh>
+            <mesh position={[0, 0.1, 0]}>
+              <sphereGeometry args={[0.009, 8, 6]} />
+              <meshStandardMaterial color="#c9ced6" />
+            </mesh>
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
+// The rack: a dark cabinet with a faceplate for every unit, coloured by what it does. In the wall behind the display it
+// is the same, only smaller. The front looks along +z.
+function RackBody({ rack }: { rack: NonNullable<Analysis['gear']['rack']> }) {
+  const unit = rules.rackUnit;
+  const base = rack.mode === 'behind' ? 0 : rack.height / 2;
+  let y = (rack.u * unit) / 2; // the faceplates fill the middle of the cabinet, top to bottom
+  const used = rack.items.reduce((sum, i) => sum + i.u, 0);
+  const faces = [
+    ...rack.items,
+    ...(rack.u > used ? [{ name: 'Blank', u: rack.u - used, kind: 'blank' as const }] : []),
+  ];
+  return (
+    <group position={[0, base, 0]}>
+      <mesh>
+        <boxGeometry args={[rack.width, rack.height, rack.depth]} />
+        <meshStandardMaterial color="#1b2027" />
+      </mesh>
+      {faces.map((item, i) => {
+        const h = item.u * unit - 0.006;
+        const centre = y - (item.u * unit) / 2;
+        y -= item.u * unit;
+        return (
+          <mesh key={i} position={[0, centre, rack.depth / 2 + 0.004]}>
+            <boxGeometry args={[rack.width * 0.86, h, 0.008]} />
+            <meshStandardMaterial color={RACK_COLOURS[item.kind]} roughness={0.5} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
 function Equipment({
   plan,
   a,
   onPresenterMove,
+  onCredenzaMove,
+  onRackMove,
 }: {
   plan: Plan;
   a: Analysis;
   onPresenterMove: (x: number, z: number) => void;
+  onCredenzaMove: (x: number, z: number) => void;
+  onRackMove: (x: number, z: number) => void;
 }) {
-  const { gear, displays } = a;
+  const { gear, displays, layout } = a;
   const spot = presenterSpot(plan, displays);
   const ear = rules.earHeight;
   const frontZ = -plan.length / 2;
   const angle = rules.speakerAngle[plan.speakerSize];
   const baffle = SPEAKER_RADIUS[plan.speakerSize];
+  const slim = rules.wallSpeaker;
+  const room = {
+    x: [-plan.width / 2 + 0.3, plan.width / 2 - 0.3],
+    z: [-plan.length / 2 + 0.3, plan.length / 2 - 0.3],
+  } as const;
+  const around = {
+    x: [-plan.width / 2 - 3, plan.width / 2 + 3],
+    z: [-plan.length / 2 - 3, plan.length / 2 + 3],
+  } as const;
+  const rack = gear.rack;
   return (
     <group>
-      {/* the video bar and its microphones */}
+      {/* the video bar and its microphones; a bar, or the display's own speakers, also sends sound into the room */}
       {gear.bar && <VideoBar bar={gear.bar} />}
       {gear.bar && plan.micCoverage && (
         <mesh position={[0, ear, frontZ + 0.1]} rotation={[-Math.PI / 2, 0, 0]}>
           <circleGeometry args={[BAR_PICKUP, 48, Math.PI, Math.PI]} />
-          <meshBasicMaterial color={COLORS.mic} transparent opacity={0.14} side={DoubleSide} depthWrite={false} />
+          <Clipped color={COLORS.mic} opacity={0.14} />
         </mesh>
       )}
+      {plan.speakerCones && (gear.bar || plan.speakers === 'display') && (
+        <>
+          <ConeVolume
+            apex={gear.bar ? gear.bar.pos : [0, displays.centerY, frontZ + 0.05]}
+            base={[0, ear, layout.table.z]}
+            halfAngle={55}
+            color={COLORS.speaker}
+            opacity={0.12}
+          />
+          <Disc position={[0, ear + 0.005, layout.table.z]} radius={2.4} color={COLORS.speaker} opacity={0.1} />
+        </>
+      )}
 
-      {/* speakers: a pair beside the display, and ceiling speakers, flush or hung on cords */}
+      {/* speakers: a pair of slim columns beside the display, and ceiling speakers, flush or hung on cords */}
       {gear.wallSpeakers.map((p, i) => (
         <group key={`sp-${i}`}>
           <mesh position={p}>
-            <boxGeometry args={[0.16, 0.36, 0.14]} />
+            <boxGeometry args={[slim.width, slim.height, slim.depth]} />
             <meshStandardMaterial color="#14171c" />
+          </mesh>
+          <mesh position={[p[0], p[1], p[2] + slim.depth / 2 + 0.001]}>
+            <boxGeometry args={[slim.width * 0.5, slim.height * 0.92, 0.002]} />
+            <meshStandardMaterial color="#3a414b" />
           </mesh>
           {plan.speakerCones && (
             <ConeVolume
@@ -907,7 +1262,7 @@ function Equipment({
       {plan.listeningPlane && (
         <mesh position={[0, ear, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[plan.width - 0.1, plan.length - 0.1]} />
-          <meshBasicMaterial color={COLORS.plane} transparent opacity={0.12} side={DoubleSide} depthWrite={false} />
+          <Clipped color={COLORS.plane} opacity={0.12} />
         </mesh>
       )}
 
@@ -942,10 +1297,7 @@ function Equipment({
       {plan.mics === 'table' &&
         gear.mics.map((p, i) => (
           <group key={`mt-${i}`}>
-            <mesh position={p}>
-              <cylinderGeometry args={[0.05, 0.05, 0.03, 16]} />
-              <meshStandardMaterial color="#14171c" />
-            </mesh>
+            <TableMic position={p} />
             {plan.micCoverage && (
               <Disc position={[p[0], p[1] + 0.02, p[2]]} radius={gear.micRadius} color={COLORS.mic} opacity={0.16} />
             )}
@@ -971,12 +1323,18 @@ function Equipment({
         />
       ))}
 
-      {/* table connection panels and the touch panel */}
+      {/* table connection panels, laptop cables, wireless sharing buttons and the touch panel */}
       {gear.panels.map((p, i) => (
         <mesh key={`pn-${i}`} position={p}>
           <boxGeometry args={[0.18, 0.02, 0.12]} />
           <meshStandardMaterial color="#14171c" />
         </mesh>
+      ))}
+      {gear.laptopInputs.map((p, i) => (
+        <TableCable key={`tc-${i}`} position={p} />
+      ))}
+      {gear.pucks.map((p, i) => (
+        <Puck key={`pk-${i}`} position={p} />
       ))}
       {gear.control && plan.control === 'table' && (
         <mesh position={gear.control} rotation={[-0.4, 0, 0]}>
@@ -989,6 +1347,51 @@ function Equipment({
           <boxGeometry args={[0.02, 0.22, 0.16]} />
           <meshStandardMaterial color="#14171c" />
         </mesh>
+      )}
+
+      {/* the cables from the table to the equipment, dashed */}
+      {gear.cables.map((c, i) => (
+        <CableLine key={`cb-${i}`} points={c.points} color={CABLE_COLOURS[c.kind]} />
+      ))}
+
+      {/* the equipment: behind the display, or in a rack that can be moved */}
+      {rack && rack.mode === 'behind' && (
+        <group position={rack.pos} rotation={[0, rack.rot, 0]}>
+          <RackBody rack={rack} />
+        </group>
+      )}
+      {rack && rack.mode !== 'behind' && (
+        <>
+          <Draggable
+            x={rack.pos[0]}
+            z={rack.pos[2]}
+            bounds={rack.mode === 'room' ? room : around}
+            onMove={onRackMove}
+            hitRadius={0.5}
+            hitHeight={rack.height}
+          >
+            {() => (
+              <group rotation={[0, rack.rot, 0]}>
+                <RackBody rack={rack} />
+              </group>
+            )}
+          </Draggable>
+          {rack.outside && (
+            <Label text="AV rack (location TBD)" position={[rack.pos[0], rack.height + 0.3, rack.pos[2]]} />
+          )}
+        </>
+      )}
+      {gear.credenza && (
+        <Draggable
+          x={gear.credenza.pos[0]}
+          z={gear.credenza.pos[2]}
+          bounds={room}
+          onMove={onCredenzaMove}
+          hitRadius={0.5}
+          hitHeight={1.2}
+        >
+          {() => <Credenza credenza={gear.credenza as NonNullable<Analysis['gear']['credenza']>} />}
+        </Draggable>
       )}
       {plan.presenter && (
         <Presenter x={spot.x} z={spot.z} size={{ width: plan.width, length: plan.length }} onMove={onPresenterMove} />
@@ -1119,7 +1522,7 @@ function Whiteboard({ wb, z }: { wb: NonNullable<Analysis['displays']['whiteboar
 // One texture shared by the displays. A projector comes with its screen in a case under the ceiling, an LED wall with
 // a grid of cabinets, and a classroom may have a whiteboard beside it.
 function Displays({ plan, displays }: { plan: Plan; displays: Analysis['displays'] }) {
-  const texture = useScreenTexture();
+  const texture = useScreenTexture(plan.system);
   const z = -plan.length / 2 + 0.03;
   const top = displays.centerY + displays.height / 2;
   const projector = displays.type === 'projector';
@@ -1176,36 +1579,59 @@ export default function PlannerScene({
   view,
   onReady,
   onPresenterMove,
+  onCredenzaMove,
+  onRackMove,
 }: {
   plan: Plan;
   analysis: Analysis;
   view: ViewState;
   onReady: (capture: Capture) => void;
   onPresenterMove: (x: number, z: number) => void;
+  onCredenzaMove: (x: number, z: number) => void;
+  onRackMove: (x: number, z: number) => void;
 }) {
   const initial = viewPose(plan, 'iso');
   const { layout, displays } = analysis;
+  const clip = useMemo(
+    () => [
+      new Plane(new Vector3(1, 0, 0), plan.width / 2),
+      new Plane(new Vector3(-1, 0, 0), plan.width / 2),
+      new Plane(new Vector3(0, 0, 1), plan.length / 2),
+      new Plane(new Vector3(0, 0, -1), plan.length / 2),
+      new Plane(new Vector3(0, 1, 0), 0),
+      new Plane(new Vector3(0, -1, 0), plan.height),
+    ],
+    [plan.width, plan.length, plan.height],
+  );
   return (
     <Canvas
       frameloop="demand"
       dpr={[1, 2]}
       camera={{ fov: 45, near: 0.1, far: 200, position: initial.position }}
-      gl={{ antialias: true, preserveDrawingBuffer: true }}
+      gl={{ antialias: true, preserveDrawingBuffer: true, localClippingEnabled: true }}
       style={{ position: 'absolute', inset: 0 }}
       aria-label="3D view of the room"
     >
       <color attach="background" args={['#14181e']} />
       <ambientLight intensity={1.15} />
       <directionalLight position={[6, 10, 8]} intensity={1.3} />
-      <Room plan={plan} />
-      {layout.tables.map((t, i) => (
-        <Table key={i} table={t} />
-      ))}
-      {layout.seats.map((s, i) => (
-        <Chair key={i} x={s.x} z={s.z} rot={s.rot} />
-      ))}
-      <Displays plan={plan} displays={displays} />
-      <Equipment plan={plan} a={analysis} onPresenterMove={onPresenterMove} />
+      <ClipContext.Provider value={clip}>
+        <Room plan={plan} />
+        {layout.tables.map((t, i) => (
+          <Table key={i} table={t} />
+        ))}
+        {layout.seats.map((s, i) => (
+          <Chair key={i} x={s.x} z={s.z} rot={s.rot} />
+        ))}
+        <Displays plan={plan} displays={displays} />
+        <Equipment
+          plan={plan}
+          a={analysis}
+          onPresenterMove={onPresenterMove}
+          onCredenzaMove={onCredenzaMove}
+          onRackMove={onRackMove}
+        />
+      </ClipContext.Provider>
       <Controls plan={plan} view={view} />
       <CaptureBridge onReady={onReady} />
     </Canvas>

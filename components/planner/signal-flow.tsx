@@ -1,4 +1,5 @@
-import { signalFlow, type FlowNode } from '@/lib/planner/flow';
+import { useState } from 'react';
+import { filterFlow, signalFlow, signalNames, type FlowNode, type Signal } from '@/lib/planner/flow';
 import type { Analysis, Plan } from '@/lib/planner/model';
 
 const BOX = { w: 130, h: 62, gap: 16 };
@@ -19,16 +20,18 @@ function wrap(text: string, max = 18): string[] {
 // The key to the colours and the dashes.
 const legend = [
   { x: 66, className: 'flow-video', text: 'Video' },
-  { x: 166, className: 'flow-audio', text: 'Audio' },
-  { x: 266, className: 'flow-control', text: 'Control' },
-  { x: 380, className: 'flow-neutral', text: 'Digital or network: solid' },
-  { x: 560, className: 'flow-neutral', text: 'Analog: dashed', analog: true },
+  { x: 156, className: 'flow-audio', text: 'Audio' },
+  { x: 256, className: 'flow-control', text: 'Control' },
+  { x: 346, className: 'flow-power', text: 'Power' },
+  { x: 430, className: 'flow-neutral', text: 'Digital or network: solid' },
+  { x: 610, className: 'flow-neutral', text: 'Analog: dashed', analog: true },
 ];
 
 // What connects to what, drawn from the plan: sources on the left, the room system in the middle, screens and speakers
 // on the right. Colour is what travels (video, audio, control); dashed is analog, solid is digital or network.
 export default function SignalFlow({ plan, analysis }: { plan: Plan; analysis: Analysis }) {
-  const { nodes, links } = signalFlow(plan, analysis);
+  const [show, setShow] = useState<Signal | 'all'>('all');
+  const { nodes, links } = filterFlow(signalFlow(plan, analysis), show);
   const columns = [0, 1, 2, 3].map((c) => nodes.filter((n) => n.column === c));
   const tallest = Math.max(...columns.map((c) => c.length));
   const height = tallest * BOX.h + (tallest - 1) * BOX.gap + 32;
@@ -75,6 +78,13 @@ export default function SignalFlow({ plan, analysis }: { plan: Plan; analysis: A
   const full = height + LEGEND;
   return (
     <div className="planner-flow">
+      <div className="planner-flow-tabs" role="group" aria-label="Which signals to show">
+        {(['all', 'video', 'audio', 'control', 'power'] as const).map((id) => (
+          <button key={id} type="button" aria-pressed={show === id} onClick={() => setShow(id)}>
+            {id === 'all' ? 'All' : signalNames[id]}
+          </button>
+        ))}
+      </div>
       <svg viewBox={`0 0 ${WIDTH} ${full}`} role="img" aria-label="Signal flow of the room">
         <title>Signal flow of the room</title>
         {links.map((l, index) => {
