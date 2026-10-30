@@ -10,9 +10,10 @@ export const drawingStyles = `
 .s-display{fill:#1f2933;stroke:#1f2933}
 .s-device{fill:#c9d3de;stroke:#52606d;stroke-width:1}
 .s-speaker{fill:#d9f2e3;stroke:#2f9e68;stroke-width:1.2}
-.s-mic{fill:#dff3fb;stroke:#1c8fb5;stroke-width:1.4}
-.s-camera{fill:#fff1cc;stroke:#c98a00;stroke-width:1.2}
-.s-fov{fill:rgba(255,183,3,.08);stroke:#e0a100;stroke-width:.8;stroke-dasharray:3 3}
+.s-mic{fill:#e4f6ec;stroke:#1f8a5a;stroke-width:1.4}
+.s-camera{fill:#dbe8ff;stroke:#2b6fd6;stroke-width:1.2}
+.s-control{fill:#fff1cc;stroke:#c98a00;stroke-width:1.2}
+.s-fov{fill:rgba(43,111,214,.08);stroke:#2b6fd6;stroke-width:.8;stroke-dasharray:3 3}
 .s-grid{fill:none;stroke:#dde3e9;stroke-width:.7}
 .s-dim,.s-ext{fill:none;stroke:#b4412c;stroke-width:1}
 .s-ext{stroke-width:.6}

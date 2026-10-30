@@ -12,6 +12,7 @@ export type Style =
   | 'chair'
   | 'display'
   | 'device'
+  | 'control'
   | 'speaker'
   | 'mic'
   | 'camera'
@@ -232,9 +233,9 @@ function planBase(plan: Plan, a: Analysis, ceiling: boolean, opts: DrawingOption
     g.text(cx, cy - 9, `C${i + 1}`, 'small');
   });
   const c = gear.control;
-  if (c && plan.control === 'wall') g.rect(X(c[0]) - 1, Y(c[2]) - 0.11 * s, 6, 0.22 * s, 'device');
+  if (c && plan.control === 'wall') g.rect(X(c[0]) - 1, Y(c[2]) - 0.11 * s, 6, 0.22 * s, 'control');
   if (c && plan.control === 'table' && !ceiling)
-    g.rect(X(c[0]) - 0.12 * s, Y(c[2]) - 0.08 * s, 0.24 * s, 0.16 * s, 'device');
+    g.rect(X(c[0]) - 0.12 * s, Y(c[2]) - 0.08 * s, 0.24 * s, 0.16 * s, 'control');
 
   return { g, s, ox, oy, X, Y, width: ox + W * s + SIDE.plan.right, height: oy + L * s + bottomSpace(opts) };
 }
@@ -244,7 +245,7 @@ export function floorPlan(plan: Plan, a: Analysis, opts: DrawingOptions = {}): D
   const { length: L, unit } = plan;
   const { g, s, ox, oy, X, Y, width, height } = planBase(plan, a, false, opts);
 
-  if (gear.bar) g.rect(X(0) - (gear.bar.width * s) / 2, Y(-L / 2) + 8, gear.bar.width * s, 6, 'device');
+  if (gear.bar) g.rect(X(0) - (gear.bar.width * s) / 2, Y(-L / 2) + 8, gear.bar.width * s, 6, 'camera');
   for (const p of gear.wallSpeakers) g.rect(X(p[0]) - 0.08 * s, Y(p[2]) - 0.07 * s, 0.16 * s, 0.14 * s, 'speaker');
   if (plan.mics === 'table' || plan.mics === 'gooseneck')
     for (const p of gear.mics) g.circle(X(p[0]), Y(p[2]), Math.max(3, 0.05 * s), 'mic');
@@ -304,8 +305,9 @@ export function floorPlan(plan: Plan, a: Analysis, opts: DrawingOptions = {}): D
 
 export function ceilingPlan(plan: Plan, a: Analysis, opts: DrawingOptions = {}): Drawing {
   const { gear } = a;
-  const { length: L, unit } = plan;
+  const { length: L, width: W, unit } = plan;
   const { g, s, ox, oy, X, Y, width, height } = planBase(plan, a, true, opts);
+  let spacing = '';
 
   if (gear.speakers.length) {
     const r = Math.max(4, 0.1 * s);
@@ -316,16 +318,34 @@ export function ceilingPlan(plan: Plan, a: Analysis, opts: DrawingOptions = {}):
     }
     const xs = unique(gear.speakers.map((p) => p[0]));
     const zs = unique(gear.speakers.map((p) => p[2]));
-    if (xs.length > 1) g.dim(X(xs[0]), Y(zs[0]), X(xs[1]), Y(zs[0]), -16, formatLength(xs[1] - xs[0], unit));
-    if (zs.length > 1) g.dim(X(xs[0]), Y(zs[0]), X(xs[0]), Y(zs[1]), 16, formatLength(zs[1] - zs[0], unit));
-    g.dim(X(xs[xs.length - 1]), Y(-L / 2), X(xs[xs.length - 1]), Y(zs[0]), -16, formatLength(zs[0] + L / 2, unit));
+    // A dimension needs room for its label. Where the speakers stand close to a wall or to each other, the spacing
+    // goes into the key under the drawing instead.
+    const stepX = xs.length > 1 ? xs[1] - xs[0] : 0;
+    const stepZ = zs.length > 1 ? zs[1] - zs[0] : 0;
+    const roomAbove = (zs[0] + L / 2) * s >= 34;
+    const roomLeft = (xs[0] + W / 2) * s >= 46;
+    const roomRight = (W / 2 - xs[xs.length - 1]) * s >= 30;
+    if (xs.length > 1 && stepX * s >= 34 && roomAbove) {
+      g.dim(X(xs[0]), Y(zs[0]), X(xs[1]), Y(zs[0]), -16, formatLength(stepX, unit));
+    }
+    if (zs.length > 1 && stepZ * s >= 34 && roomLeft) {
+      g.dim(X(xs[0]), Y(zs[0]), X(xs[0]), Y(zs[1]), 16, formatLength(stepZ, unit));
+    }
+    if (roomAbove && roomRight) {
+      g.dim(X(xs[xs.length - 1]), Y(-L / 2), X(xs[xs.length - 1]), Y(zs[0]), -16, formatLength(zs[0] + L / 2, unit));
+    }
+    if ((stepX && stepX * s < 34) || (stepZ && stepZ * s < 34) || !roomAbove || !roomLeft || !roomRight) {
+      spacing = `speakers every ${formatLength(stepX || stepZ, unit)} × ${formatLength(stepZ || stepX, unit)}`;
+    }
   }
   for (const p of gear.wallSpeakers) g.rect(X(p[0]) - 0.08 * s, Y(p[2]) - 0.07 * s, 0.16 * s, 0.14 * s, 'speaker');
 
   const proj = a.displays.projector;
   if (proj) {
-    g.rect(X(proj.pos[0]) - 0.2 * s, Y(proj.pos[2]) - 0.15 * s, 0.4 * s, 0.3 * s, 'device');
-    g.text(X(proj.pos[0]), Y(proj.pos[2]) + 3.5, 'PROJ', 'small');
+    for (const x of a.displays.xs) {
+      g.rect(X(x) - 0.2 * s, Y(proj.pos[2]) - 0.15 * s, 0.4 * s, 0.3 * s, 'camera');
+      g.text(X(x) + 0.2 * s + 3, Y(proj.pos[2]) + 3.5, 'PROJ', 'small', 'start');
+    }
   }
 
   if (plan.mics === 'ceiling' || plan.mics === 'pendant') {
@@ -349,7 +369,8 @@ export function ceilingPlan(plan: Plan, a: Analysis, opts: DrawingOptions = {}):
   }
   const legend =
     '○ ceiling speaker · □ microphone array · C camera on the wall · PROJ projector · dashed: furniture below · grid: ' +
-    (plan.unit === 'ft' ? '2 × 2 ft tiles' : '600 mm tiles');
+    (plan.unit === 'ft' ? '2 × 2 ft tiles' : '600 mm tiles') +
+    (spacing ? ` · ${spacing}` : '');
   titleBlock(g, ox, oy + L * s + 50, 'Ceiling plan', plan, legend, opts.bare);
   return { id: 'ceiling', title: drawingTitles.ceiling, width, height, scale: s, prims: g.prims };
 }
@@ -385,7 +406,7 @@ export function displayWall(plan: Plan, a: Analysis, opts: DrawingOptions = {}):
       Y(gear.bar.pos[1]) - (gear.bar.height * s) / 2,
       gear.bar.width * s,
       gear.bar.height * s,
-      'device',
+      'camera',
     );
   }
   for (const p of gear.wallSpeakers) g.rect(X(p[0]) - 0.08 * s, Y(p[1]) - 0.18 * s, 0.16 * s, 0.36 * s, 'speaker');
@@ -488,10 +509,10 @@ export function section(plan: Plan, a: Analysis, opts: DrawingOptions = {}): Dra
       Y(gear.bar.pos[1]) - (gear.bar.height * s) / 2,
       Math.max(8, gear.bar.depth * s),
       gear.bar.height * s,
-      'device',
+      'camera',
     );
   const proj = a.displays.projector;
-  if (proj) g.rect(X(proj.pos[2]) - 0.2 * s, Y(H), 0.4 * s, 0.14 * s, 'device');
+  if (proj) g.rect(X(proj.pos[2]) - 0.2 * s, Y(H), 0.4 * s, 0.14 * s, 'camera');
 
   // cameras, with the height they can see
   gear.cameras.forEach((cam, i) => {

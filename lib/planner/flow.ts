@@ -9,8 +9,8 @@ const systemTitle: Record<RoomSystem, string> = {
   meet: 'Meet room system',
 };
 const platform: Record<RoomSystem, string> = {
-  byod: 'any meeting app, over USB',
-  teams: 'Microsoft Teams Rooms',
+  byod: 'any meeting app',
+  teams: 'Teams Rooms',
   zoom: 'Zoom Rooms',
   webex: 'Webex',
   meet: 'Google Meet',
@@ -41,7 +41,7 @@ export function signalFlow(plan: Plan, a: Analysis): Flow {
   // of the room, with the camera, microphones and speakers inside it.
   const barIsSystem = plan.bar !== 'none' && !plan.engine;
   if (plan.bar !== 'none' && plan.engine) {
-    nodes.push({ id: 'bar', column: 0, title: 'Video bar', detail: 'camera, microphones, speakers' });
+    nodes.push({ id: 'bar', column: 0, title: 'Video bar', detail: 'camera, mics, speakers' });
   }
 
   const ptz = ptzCameras(gear);

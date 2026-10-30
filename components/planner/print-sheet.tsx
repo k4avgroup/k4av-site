@@ -46,6 +46,21 @@ export default function PrintSheet({ sheet, svgRef }: { sheet: DrawingSheet; svg
       <text className="t-small" x={bar.x} y={bar.y - 12}>
         {`Scale ${sheet.scale.label}`}
       </text>
+      {sheet.key.items.map((item, i) => (
+        <g key={item.label}>
+          <rect
+            className={`s-${item.style}`}
+            x={sheet.key.x}
+            y={sheet.key.y + i * 15 - 8}
+            width={14}
+            height={9}
+            rx={1.5}
+          />
+          <text className="t-small" x={sheet.key.x + 22} y={sheet.key.y + i * 15}>
+            {item.label}
+          </text>
+        </g>
+      ))}
     </svg>
   );
 }

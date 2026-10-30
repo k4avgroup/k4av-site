@@ -1,4 +1,4 @@
-import { buildDrawings, roomLabel, type Drawing, type TextStyle } from './drawings.ts';
+import { buildDrawings, roomLabel, type Drawing, type Style, type TextStyle } from './drawings.ts';
 import type { Analysis, Plan } from './model.ts';
 
 // One printable sheet: the four drawings at a single standard scale, with a frame, a scale bar and a title block.
@@ -42,6 +42,8 @@ export type ScaleBar = {
   unit: 'm' | 'ft';
   ticks: { x: number; label: string }[];
 };
+// The colour key: what the colours of the devices mean, the same three as in the signal flow.
+export type SheetKey = { x: number; y: number; items: { style: Style; label: string }[] };
 export type DrawingSheet = {
   paper: Paper;
   frame: { x: number; y: number; w: number; h: number };
@@ -52,6 +54,7 @@ export type DrawingSheet = {
   placed: PlacedDrawing[];
   block: { x: number; y: number; w: number; h: number; lines: SheetLine[] };
   bar: ScaleBar;
+  key: SheetKey;
 };
 
 const MARGIN = 22;
@@ -138,5 +141,16 @@ export function buildSheet(plan: Plan, analysis: Analysis, date: string): Drawin
     ] satisfies SheetLine[],
   };
 
-  return { paper, frame, rule, scale: chosen, pointsPerMetre: ppm, fits, placed, block, bar };
+  const key: SheetKey = {
+    x: frame.x + 290,
+    y: rule + 24,
+    items: [
+      { style: 'camera', label: 'Video: cameras, video bar, projector' },
+      { style: 'speaker', label: 'Audio: speakers and microphones' },
+      { style: 'control', label: 'Control: touch panels' },
+      { style: 'display', label: 'Displays and whiteboard' },
+    ],
+  };
+
+  return { paper, frame, rule, scale: chosen, pointsPerMetre: ppm, fits, placed, block, bar, key };
 }

@@ -112,6 +112,22 @@ test('the scale bar is as long on paper as the length it names', () => {
   }
 });
 
+test('the colour key explains video, audio and control, clear of the scale bar and the title block', () => {
+  for (const { label, plan } of rooms) {
+    const sheet = buildSheet(plan, analyze(plan), today);
+    const { key, bar, block, rule, frame } = sheet;
+    assert.deepEqual(
+      key.items.map((i) => i.style),
+      ['camera', 'speaker', 'control', 'display'],
+      label,
+    );
+    assert.ok(key.x > bar.x + bar.width + 30, `${label}: clear of the scale bar`);
+    const widest = Math.max(...key.items.map((i) => i.label.length * 5.5));
+    assert.ok(key.x + 22 + widest < block.x, `${label}: clear of the title block`);
+    assert.ok(key.y - 8 > rule && key.y + (key.items.length - 1) * 15 < frame.y + frame.h, `${label}: in the strip`);
+  }
+});
+
 test('drawings for a sheet leave out the lines the title block carries', () => {
   const a = analyze(base);
   const bare = buildDrawings(base, a, { scale: 40, bare: true });
