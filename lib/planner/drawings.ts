@@ -210,7 +210,7 @@ function planBase(plan: Plan, a: Analysis, ceiling: boolean, opts: DrawingOption
     const cx = X(cam.pos[0]);
     const cy = Y(cam.pos[2]);
     g.rect(cx - 5, cy - 5, 10, 10, 'camera', 2);
-    g.text(cx, cy + (cam.pos[2] < 0 ? 19 : -9), `C${i + 1}`, 'small');
+    g.text(cx, cy - 9, `C${i + 1}`, 'small');
   });
   const c = gear.control;
   if (c && plan.control === 'wall') g.rect(X(c[0]) - 1, Y(c[2]) - 0.11 * s, 6, 0.22 * s, 'device');
@@ -378,7 +378,7 @@ export function displayWall(plan: Plan, a: Analysis, opts: DrawingOptions = {}):
   g.dim(X(-W / 2), Y(H), X(W / 2), Y(H), -26, formatLength(W, unit));
   g.dim(X(-W / 2), Y(H), X(-W / 2), Y(0), 30, formatLength(H, unit));
   const span = displays.count === 2 ? 2 * displays.width + 0.12 : displays.width;
-  g.dim(X(-span / 2), Y(top), X(span / 2), Y(top), -12, formatLength(span, unit));
+  g.dim(X(-span / 2), Y(bottom), X(span / 2), Y(bottom), 24, formatLength(span, unit));
   g.dim(X(W / 2), Y(bottom), X(W / 2), Y(0), -30, `bottom ${formatLength(bottom, unit)}`);
   g.dim(X(W / 2), Y(top), X(W / 2), Y(0), -64, `top ${formatLength(top, unit)}`);
   unique(onWall.map((c) => c.pos[1])).forEach((y, i) => {
