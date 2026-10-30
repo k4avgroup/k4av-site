@@ -37,6 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               areaServed: ['Seattle', 'Bellevue', 'Greater Seattle Area'],
               ...(site.email && { email: site.email }),
               ...(site.phoneTel && { telephone: site.phoneTel }),
+              ...(site.socials.length > 0 && { sameAs: site.socials.map((s) => s.url) }),
             }).replace(/</g, '\\u003c'),
           }}
         />

@@ -262,6 +262,20 @@ export function DetailTrio({ items }: { items: { photo: Photo; label: string }[]
   );
 }
 
+// Platforms grouped by what they do, one row per group.
+export function PlatformGroups({ groups }: { groups: { title: string; items: string[] }[] }) {
+  return (
+    <dl className="platform-groups">
+      {groups.map((g) => (
+        <div key={g.title}>
+          <dt>{g.title}</dt>
+          <dd>{g.items.join(' · ')}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 export function Chips({ items }: { items: string[] }) {
   return (
     <ul className="chips">
