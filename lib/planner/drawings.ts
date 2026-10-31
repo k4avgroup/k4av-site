@@ -8,11 +8,12 @@ import {
   type Plan,
   type Vec3,
 } from './model.ts';
+import { deviceSchedule, rackLayout } from './schedule.ts';
 
 // Drawings of the planned room, as shapes in pixels: a floor plan, a ceiling plan, the display wall and a section.
 // Shapes carry a style name; the page decides how each style looks. Dimension lines show the real lengths.
 
-export type DrawingId = 'floor' | 'ceiling' | 'front' | 'side' | 'cabling' | 'rack';
+export type DrawingId = 'floor' | 'ceiling' | 'front' | 'side' | 'cabling' | 'rack' | 'schedule';
 export type Style =
   | 'wall'
   | 'floor'
@@ -43,7 +44,10 @@ export type Style =
   | 'rack-compute'
   | 'rack-laptop'
   | 'rack-power'
-  | 'rack-blank';
+  | 'rack-blank'
+  | 'head'
+  | 'group'
+  | 'table';
 export type TextStyle = 'label' | 'small' | 'dim' | 'title' | 'ondark';
 export type Prim =
   | { k: 'rect'; x: number; y: number; w: number; h: number; s: Style; r?: number }
@@ -67,6 +71,7 @@ export const drawingTitles: Record<DrawingId, string> = {
   side: 'Section',
   cabling: 'Cabling',
   rack: 'Rack',
+  schedule: 'Schedule',
 };
 
 export type DrawingOptions = {
@@ -272,6 +277,7 @@ function planBase(plan: Plan, a: Analysis, kind: 'floor' | 'ceiling' | 'cabling'
   // wall devices: cameras with what they see, and the control panel
   // two cameras on the same spot of the plan (one above the display, one below) are drawn side by side
   const stacked = new Map<string, number>();
+  const labels: [number, number][] = [];
   gear.cameras.forEach((cam, i) => {
     if (kind === 'floor') wedge(g, plan, cam, X, Y);
     const key = `${cam.pos[0]},${cam.pos[2]}`;
@@ -281,7 +287,11 @@ function planBase(plan: Plan, a: Analysis, kind: 'floor' | 'ceiling' | 'cabling'
     const cy = Y(cam.pos[2]);
     if (cam.kind === 'table') g.circle(cx, cy, 5, 'camera');
     else g.rect(cx - 5, cy - 5, 10, 10, 'camera', 2);
-    g.text(cx, cy - 9, `C${i + 1}`, 'small');
+    // cameras close together on a small plan would write their numbers on top of each other: raise the later ones
+    let ly = cy - 9;
+    while (labels.some(([lx, y]) => Math.abs(lx - cx) < 14 && Math.abs(y - ly) < 10)) ly -= 10;
+    labels.push([cx, ly]);
+    g.text(cx, ly, `C${i + 1}`, 'small');
   });
   const c = gear.control;
   if (c && plan.control === 'wall') g.rect(X(c[0]) - 1, Y(c[2]) - 0.11 * s, 6, 0.22 * s, 'control');
@@ -483,12 +493,17 @@ export function displayWall(plan: Plan, a: Analysis, opts: DrawingOptions = {}):
   for (const p of gear.wallSpeakers) g.rect(X(p[0]) - 0.08 * s, Y(p[1]) - 0.18 * s, 0.16 * s, 0.36 * s, 'speaker');
   // the cameras at the display; the others are on the side walls, the back wall or the table
   const onWall = gear.cameras.filter((c) => c.kind === 'front');
-  onWall.forEach((cam, i) => {
+  for (const cam of onWall) {
     g.rect(X(cam.pos[0]) - 0.085 * s, Y(cam.pos[1]) - 0.1 * s, 0.17 * s, 0.2 * s, 'camera', 2);
-    // the label of a camera below the display goes under it, not onto the screen
+    // the label of a camera below the display goes under it, not onto the screen; the number is the one on the plans
     const below = cam.pos[1] < bottom;
-    g.text(X(cam.pos[0]), Y(cam.pos[1]) + (below ? 0.1 * s + 12 : -0.1 * s - 5), `C${i + 1}`, 'small');
-  });
+    g.text(
+      X(cam.pos[0]),
+      Y(cam.pos[1]) + (below ? 0.1 * s + 12 : -0.1 * s - 5),
+      `C${gear.cameras.indexOf(cam) + 1}`,
+      'small',
+    );
+  }
   const lowBar = gear.bar !== null && gear.bar.pos[1] < bottom;
   if (gear.rack?.mode === 'behind') {
     const box = gear.rack;
@@ -786,26 +801,6 @@ export function cablingPlan(plan: Plan, a: Analysis, opts: DrawingOptions = {}):
   return { id: 'cabling', title: drawingTitles.cabling, width, height, scale: s, prims: g.prims };
 }
 
-// Brand-free tags for the units of the rack, like the tags on an AV drawing: PDU-01, DSP-01, SW-01.
-const tagFor = (name: string) => {
-  const starts: [string, string][] = [
-    ['Control processor', 'CU'],
-    ['Video matrix', 'SW'],
-    ['Video switcher', 'SW'],
-    ['Video transmitter', 'TX'],
-    ['Video receiver', 'RX'],
-    ['Wireless presentation', 'AP'],
-    ['Room computer', 'PC'],
-    ["Client's laptop", 'LAPTOP'],
-    ['Audio processor', 'DSP'],
-    ['Power amplifier', 'PA'],
-    ['Wireless microphone', 'WM'],
-    ['Network switch', 'NET'],
-    ['Power distribution', 'PDU'],
-  ];
-  return starts.find(([start]) => name.startsWith(start))?.[1] ?? '';
-};
-
 // The AV system rack elevation: the units from the top down, by function and not by brand, with room kept free for
 // the client's laptop. A rack behind the display also shows the wall, with the box drawn dashed behind the display.
 export function rackElevation(plan: Plan, a: Analysis, opts: DrawingOptions = {}): Drawing {
@@ -815,7 +810,8 @@ export function rackElevation(plan: Plan, a: Analysis, opts: DrawingOptions = {}
   const ox = 84;
   const oy = 64;
   const rw = 330;
-  const u = rack ? rack.u : 6;
+  const rows = rack ? rackLayout(rack) : [];
+  const u = rack ? (rows[0]?.top ?? rack.u) : 6;
   const h = u * unitPx;
   const behind = rack?.mode === 'behind';
   const width = ox + rw + 110 + (behind ? 330 : 0);
@@ -827,28 +823,15 @@ export function rackElevation(plan: Plan, a: Analysis, opts: DrawingOptions = {}
   }
   g.rect(ox - 14, oy - 14, rw + 28, h + 28, 'wall');
   for (let i = 1; i <= u; i++) g.text(ox - 22, oy + h - (i - 0.5) * unitPx + 3.5, String(i), 'small', 'end');
-  const counts = new Map<string, number>();
   let y = oy;
-  const used = rack.items.reduce((sum, i) => sum + i.u, 0);
-  const rows = [...rack.items, ...(u > used ? [{ name: 'Blank panel', u: u - used, kind: 'blank' as const }] : [])];
-  for (const item of rows) {
+  for (const { item, label } of rows) {
     const hh = item.u * unitPx;
-    const tag = tagFor(item.name);
-    const n = (counts.get(tag) ?? 0) + 1;
-    counts.set(tag, n);
     g.rect(ox, y, rw, hh, item.kind === 'laptop' ? 'rackfree' : (`rack-${item.kind}` as Style));
     g.text(ox + 10, y + hh / 2 + 3.5, item.name, 'label', 'start');
-    if (tag && item.kind !== 'blank')
-      g.text(
-        ox + rw + 10,
-        y + hh / 2 + 3.5,
-        item.kind === 'laptop' ? tag : `${tag}-${String(n).padStart(2, '0')}`,
-        'small',
-        'start',
-      );
+    if (label) g.text(ox + rw + 22, y + hh / 2 + 3.5, label, 'small', 'start');
     y += hh;
   }
-  g.dim(ox + rw + 52, oy, ox + rw + 52, oy + h, -8, `${u} U`);
+  g.dim(ox + rw + 78, oy, ox + rw + 78, oy + h, -8, `${u} U`);
 
   if (behind) {
     // the wall: the display, and the box behind it
@@ -874,9 +857,120 @@ export function rackElevation(plan: Plan, a: Analysis, opts: DrawingOptions = {}
   return { id: 'rack', title: drawingTitles.rack, width, height, scale: unitPx, prims: g.prims };
 }
 
-// The four drawings of the printed sheet, and the cabling plan and the rack elevation beside them on the screen.
+// ---------------------------------------------------------------- the device schedule
+
+// Columns of the schedule, in pixels, and how many characters of the two text sizes fit in each.
+const COLUMNS = [
+  { key: 'tag', title: 'TAG', w: 54 },
+  { key: 'name', title: 'DEVICE', w: 236 },
+  { key: 'qty', title: 'QTY', w: 34 },
+  { key: 'where', title: 'LOCATION', w: 158 },
+  { key: 'mount', title: 'MOUNTING', w: 118 },
+] as const;
+const charsIn = (w: number, size: 'label' | 'small') => Math.floor((w - 12) / (size === 'label' ? 5.4 : 4.7));
+
+// Breaks a text into lines of at most `max` characters, at the spaces.
+export function wrapText(text: string, max: number): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(' ')) {
+    if (line && line.length + 1 + word.length > max) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = line ? `${line} ${word}` : word;
+    }
+  }
+  lines.push(line);
+  return lines;
+}
+
+// The device schedule as a table: tag, device, quantity, location and mounting height, in groups.
+export function scheduleDrawing(plan: Plan, a: Analysis, opts: DrawingOptions = {}): Drawing {
+  const g = sheet();
+  const ox = 16;
+  const oy = 20;
+  const tableW = COLUMNS.reduce((sum, c) => sum + c.w, 0);
+  const edges = COLUMNS.reduce<number[]>((xs, c) => [...xs, xs[xs.length - 1] + c.w], [ox]);
+  let y = oy;
+
+  const head = 22;
+  g.rect(ox, y, tableW, head, 'head');
+  COLUMNS.forEach((c, i) =>
+    g.text(
+      c.key === 'qty' ? edges[i] + c.w / 2 : edges[i] + 6,
+      y + 15,
+      c.title,
+      'ondark',
+      c.key === 'qty' ? 'middle' : 'start',
+    ),
+  );
+  y += head;
+  // the rows of devices, whose cells the column lines run through; a group title has the whole width
+  const spans: [number, number][] = [];
+
+  for (const group of deviceSchedule(plan, a)) {
+    g.rect(ox, y, tableW, 20, 'group');
+    g.text(ox + 6, y + 14, group.title, 'label', 'start');
+    y += 20;
+    for (const row of group.rows) {
+      const top = y;
+      const cells = {
+        tag: wrapText(row.tag, charsIn(COLUMNS[0].w, 'label')),
+        name: wrapText(row.name, charsIn(COLUMNS[1].w, 'label')),
+        qty: [String(row.qty)],
+        where: wrapText(row.where, charsIn(COLUMNS[3].w, 'small')),
+        mount: wrapText(row.mount || '-', charsIn(COLUMNS[4].w, 'small')),
+      };
+      const lines = Math.max(...Object.values(cells).map((c) => c.length));
+      const height = lines * 12 + 8;
+      COLUMNS.forEach((c, i) => {
+        const style = c.key === 'where' || c.key === 'mount' ? 'small' : 'label';
+        cells[c.key].forEach((t, k) =>
+          g.text(
+            c.key === 'qty' ? edges[i] + c.w / 2 : edges[i] + 6,
+            y + 14 + k * 12,
+            t,
+            style,
+            c.key === 'qty' ? 'middle' : 'start',
+          ),
+        );
+      });
+      y += height;
+      spans.push([top, y]);
+      g.line(ox, y, ox + tableW, y, 'table');
+    }
+  }
+  for (const x of edges.slice(1, -1)) for (const [top, bottom] of spans) g.line(x, top, x, bottom, 'table');
+  g.rect(ox, oy, tableW, y - oy, 'table');
+
+  titleBlock(
+    g,
+    ox,
+    y + 34,
+    'Device schedule',
+    plan,
+    'AFF: above finished floor · U: rack unit · tags match the drawings: C camera, CS ceiling speaker, MIC microphone, WM microphone cabinet, AVR rack',
+    opts.bare,
+  );
+  return {
+    id: 'schedule',
+    title: drawingTitles.schedule,
+    width: ox * 2 + tableW,
+    height: y + 34 + (opts.bare ? 14 : 29) + 3 * 12 + 14,
+    scale: 1,
+    prims: g.prims,
+  };
+}
+
+// The four drawings of the first printed sheet, then the cabling plan, the rack elevation and the device schedule.
 export function buildAllDrawings(plan: Plan, a: Analysis, opts: DrawingOptions = {}): Drawing[] {
-  return [...buildDrawings(plan, a, opts), cablingPlan(plan, a, opts), rackElevation(plan, a, opts)];
+  return [
+    ...buildDrawings(plan, a, opts),
+    cablingPlan(plan, a, opts),
+    rackElevation(plan, a, opts),
+    scheduleDrawing(plan, a, opts),
+  ];
 }
 
 export function buildDrawings(plan: Plan, a: Analysis, opts: DrawingOptions = {}): Drawing[] {

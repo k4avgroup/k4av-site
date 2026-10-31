@@ -435,6 +435,13 @@
     width: 100%;
     height: auto;
   }
+  /* one sheet to a page */
+  .planner-print-page {
+    break-after: page;
+  }
+  .planner-print-page:last-child {
+    break-after: auto;
+  }
 }
 .planner-flow svg {
   display: block;

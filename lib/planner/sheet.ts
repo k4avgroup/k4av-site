@@ -1,7 +1,17 @@
-import { buildDrawings, roomLabel, type Drawing, type Style, type TextStyle } from './drawings.ts';
+import {
+  buildDrawings,
+  cablingPlan,
+  rackElevation,
+  roomLabel,
+  scheduleDrawing,
+  type Drawing,
+  type Style,
+  type TextStyle,
+} from './drawings.ts';
 import type { Analysis, Plan } from './model.ts';
 
-// One printable sheet: the four drawings at a single standard scale, with a frame, a scale bar and a title block.
+// The printed sheets: first the four drawings at a single standard scale, then the cabling plan, then the device
+// schedule with the rack elevation. Each has a frame, a title block and, for a scaled drawing, a scale bar.
 // Everything is measured in points (1/72 inch), so one drawing pixel is one point on the paper.
 
 const PT_PER_MM = 72 / 25.4;
@@ -32,7 +42,8 @@ export const imperialScales: PaperScale[] = [
 // Pixels (points) on the sheet for one metre of the room, at a scale of 1 to `ratio`.
 export const pointsPerMetre = (ratio: number) => (1000 * PT_PER_MM) / ratio;
 
-export type PlacedDrawing = { drawing: Drawing; x: number; y: number };
+// `k` shrinks a drawing that is not to scale (the schedule, the rack) so that it fits its place
+export type PlacedDrawing = { drawing: Drawing; x: number; y: number; k?: number };
 export type SheetLine = { text: string; style: TextStyle };
 export type ScaleBar = {
   x: number;
@@ -44,15 +55,23 @@ export type ScaleBar = {
 };
 // The colour key: what the colours of the devices mean, the same three as in the signal flow.
 export type SheetKey = { x: number; y: number; items: { style: Style; label: string }[] };
-export type DrawingSheet = {
+// What the printed page needs: the frame, the drawings in it, the title block, and a scale bar and a colour key when
+// the page has them (a page of tables has neither).
+export type PrintPage = {
   paper: Paper;
   frame: { x: number; y: number; w: number; h: number };
   rule: number; // the line above the strip with the scale bar and the title block
+  scale: PaperScale | null;
+  placed: PlacedDrawing[];
+  block: { x: number; y: number; w: number; h: number; lines: SheetLine[] };
+  bar: ScaleBar | null;
+  key: SheetKey | null;
+};
+// The first sheet: the four drawings at one standard scale
+export type DrawingSheet = PrintPage & {
   scale: PaperScale;
   pointsPerMetre: number;
   fits: boolean; // every drawing is inside its place at this scale
-  placed: PlacedDrawing[];
-  block: { x: number; y: number; w: number; h: number; lines: SheetLine[] };
   bar: ScaleBar;
   key: SheetKey;
 };
@@ -86,13 +105,57 @@ export function placeDrawings(drawings: Drawing[], area: Area, force = false): P
   ];
 }
 
-export function buildSheet(plan: Plan, analysis: Analysis, date: string): DrawingSheet {
-  const metric = plan.unit === 'm';
-  const paper = metric ? papers.metric : papers.imperial;
-  const scales = metric ? metricScales : imperialScales;
+const paperFor = (plan: Plan) => (plan.unit === 'm' ? papers.metric : papers.imperial);
+const scalesFor = (plan: Plan) => (plan.unit === 'm' ? metricScales : imperialScales);
+
+// The frame of a sheet, the rule above the strip at the bottom, and the area inside for the drawings.
+function pageGeometry(paper: Paper) {
   const frame = { x: MARGIN, y: MARGIN, w: paper.w - 2 * MARGIN, h: paper.h - 2 * MARGIN };
   const rule = frame.y + frame.h - BAND;
   const area = { x: frame.x + PAD, y: frame.y + PAD, w: frame.w - 2 * PAD, h: rule - frame.y - 2 * PAD };
+  return { frame, rule, area };
+}
+
+// A scale bar at most 220 points long, with a round length: 1, 2, 5 m, or 3, 10, 20 ft.
+function scaleBarFor(frame: PrintPage['frame'], ppm: number, metric: boolean): ScaleBar {
+  const perUnit = metric ? ppm : ppm * 0.3048; // points for one metre, or one foot
+  const totals = metric ? [1, 2, 3, 4, 5, 6, 8, 10, 15, 20] : [3, 5, 10, 15, 20, 30, 40, 60];
+  const total = [...totals].reverse().find((t) => t * perUnit <= 220) ?? totals[0];
+  return {
+    x: frame.x + 14,
+    y: frame.y + frame.h - 34,
+    width: round(total * perUnit),
+    total,
+    unit: metric ? 'm' : 'ft',
+    ticks: [0, total / 2, total].map((v) => ({
+      x: round(frame.x + 14 + v * perUnit),
+      label: v === 0 ? '0' : `${v} ${metric ? 'm' : 'ft'}`,
+    })),
+  };
+}
+
+function blockFor(frame: PrintPage['frame'], paper: Paper, plan: Plan, heading: string, line: string) {
+  return {
+    x: frame.x + frame.w - BLOCK.w - 8,
+    y: frame.y + frame.h - BLOCK.h - 8,
+    w: BLOCK.w,
+    h: BLOCK.h,
+    lines: [
+      { text: 'K4 AV GROUP', style: 'title' },
+      { text: heading, style: 'label' },
+      { text: roomLabel(plan), style: 'label' },
+      { text: line, style: 'label' },
+      { text: `${paper.name} sheet. Indicative sketch. Check dimensions on site.`, style: 'small' },
+    ] satisfies SheetLine[],
+  };
+}
+
+// Sheet 1: the four drawings. `sheets` is how many sheets the set has, for "Sheet 1 of 3".
+export function buildSheet(plan: Plan, analysis: Analysis, date: string, sheets = 1): DrawingSheet {
+  const metric = plan.unit === 'm';
+  const paper = paperFor(plan);
+  const scales = scalesFor(plan);
+  const { frame, rule, area } = pageGeometry(paper);
 
   // the largest standard scale at which all four drawings fit their places
   let chosen = scales[scales.length - 1];
@@ -112,34 +175,14 @@ export function buildSheet(plan: Plan, analysis: Analysis, date: string): Drawin
   }
 
   const ppm = pointsPerMetre(chosen.ratio);
-  const perUnit = metric ? ppm : ppm * 0.3048; // points for one metre, or one foot
-  const totals = metric ? [1, 2, 3, 4, 5, 6, 8, 10, 15, 20] : [3, 5, 10, 15, 20, 30, 40, 60];
-  const total = [...totals].reverse().find((t) => t * perUnit <= 220) ?? totals[0];
-  const bar: ScaleBar = {
-    x: frame.x + 14,
-    y: frame.y + frame.h - 34,
-    width: round(total * perUnit),
-    total,
-    unit: metric ? 'm' : 'ft',
-    ticks: [0, total / 2, total].map((v) => ({
-      x: round(frame.x + 14 + v * perUnit),
-      label: v === 0 ? '0' : `${v} ${metric ? 'm' : 'ft'}`,
-    })),
-  };
-
-  const block = {
-    x: frame.x + frame.w - BLOCK.w - 8,
-    y: frame.y + frame.h - BLOCK.h - 8,
-    w: BLOCK.w,
-    h: BLOCK.h,
-    lines: [
-      { text: 'K4 AV GROUP', style: 'title' },
-      { text: 'Meeting room plan', style: 'label' },
-      { text: roomLabel(plan), style: 'label' },
-      { text: `Scale ${chosen.label}   ·   Date ${date}   ·   Sheet 1 of 1`, style: 'label' },
-      { text: `${paper.name} sheet. Indicative sketch. Check dimensions on site.`, style: 'small' },
-    ] satisfies SheetLine[],
-  };
+  const bar = scaleBarFor(frame, ppm, metric);
+  const block = blockFor(
+    frame,
+    paper,
+    plan,
+    'Meeting room plan',
+    `Scale ${chosen.label}   ·   Date ${date}   ·   Sheet 1 of ${sheets}`,
+  );
 
   const key: SheetKey = {
     x: frame.x + 290,
@@ -153,4 +196,92 @@ export function buildSheet(plan: Plan, analysis: Analysis, date: string): Drawin
   };
 
   return { paper, frame, rule, scale: chosen, pointsPerMetre: ppm, fits, placed, block, bar, key };
+}
+
+// Sheet 2: the cabling plan alone, at the largest standard scale that fits the page.
+function cablingSheet(plan: Plan, analysis: Analysis, date: string, sheets: number): PrintPage {
+  const metric = plan.unit === 'm';
+  const paper = paperFor(plan);
+  const scales = scalesFor(plan);
+  const { frame, rule, area } = pageGeometry(paper);
+  let chosen = scales[scales.length - 1];
+  let drawing = cablingPlan(plan, analysis, { scale: pointsPerMetre(chosen.ratio), bare: true });
+  for (const candidate of scales) {
+    const built = cablingPlan(plan, analysis, { scale: pointsPerMetre(candidate.ratio), bare: true });
+    if (built.width <= area.w && built.height <= area.h) {
+      chosen = candidate;
+      drawing = built;
+      break;
+    }
+  }
+  const placed: PlacedDrawing[] = [
+    {
+      drawing,
+      x: area.x + Math.max(0, (area.w - drawing.width) / 2),
+      y: area.y + Math.max(0, (area.h - drawing.height) / 2),
+    },
+  ];
+  return {
+    paper,
+    frame,
+    rule,
+    scale: chosen,
+    placed,
+    block: blockFor(
+      frame,
+      paper,
+      plan,
+      'Cabling plan',
+      `Scale ${chosen.label}   ·   Date ${date}   ·   Sheet 2 of ${sheets}`,
+    ),
+    bar: scaleBarFor(frame, pointsPerMetre(chosen.ratio), metric),
+    key: null,
+  };
+}
+
+// Sheet 3: the device schedule, and the rack elevation beside it. Neither is to scale, so both shrink together when
+// the page is too small for them at their natural size.
+function scheduleSheet(plan: Plan, analysis: Analysis, date: string, sheets: number): PrintPage {
+  const paper = paperFor(plan);
+  const { frame, rule, area } = pageGeometry(paper);
+  const drawings = [
+    scheduleDrawing(plan, analysis, { bare: true }),
+    ...(analysis.gear.rack ? [rackElevation(plan, analysis, { bare: true })] : []),
+  ];
+  const gap = 24;
+  const wide = drawings.reduce((sum, d) => sum + d.width, 0) + gap * (drawings.length - 1);
+  const tall = Math.max(...drawings.map((d) => d.height));
+  const k = Math.min(1, area.w / wide, area.h / tall);
+  let x = area.x + Math.max(0, (area.w - wide * k) / 2);
+  const placed = drawings.map((drawing): PlacedDrawing => {
+    const at = { drawing, x, y: area.y, k };
+    x += (drawing.width + gap) * k;
+    return at;
+  });
+  return {
+    paper,
+    frame,
+    rule,
+    scale: null,
+    placed,
+    block: blockFor(
+      frame,
+      paper,
+      plan,
+      analysis.gear.rack ? 'Device schedule and AV rack' : 'Device schedule',
+      `Not to scale   ·   Date ${date}   ·   Sheet 3 of ${sheets}`,
+    ),
+    bar: null,
+    key: null,
+  };
+}
+
+// The whole set, in the order it prints.
+export function buildSheets(plan: Plan, analysis: Analysis, date: string): PrintPage[] {
+  const sheets = 3;
+  return [
+    buildSheet(plan, analysis, date, sheets),
+    cablingSheet(plan, analysis, date, sheets),
+    scheduleSheet(plan, analysis, date, sheets),
+  ];
 }

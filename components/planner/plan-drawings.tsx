@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { buildAllDrawings, type DrawingId } from '@/lib/planner/drawings';
 import type { Analysis, Plan } from '@/lib/planner/model';
-import { buildSheet } from '@/lib/planner/sheet';
+import { buildSheets } from '@/lib/planner/sheet';
 import { drawingStyles, Shape } from './drawing-shapes';
 import PrintSheet from './print-sheet';
 
@@ -26,21 +26,28 @@ const fileNames: Record<DrawingId, string> = {
   side: 'k4av-section.svg',
   cabling: 'k4av-cabling-plan.svg',
   rack: 'k4av-rack-elevation.svg',
+  schedule: 'k4av-device-schedule.svg',
 };
 
-// Floor plan, ceiling plan, display wall and section, with dimensions, and the same four on one printable sheet.
+// The drawings one at a time, with dimensions, and the same drawings on three printable sheets.
 export default function PlanDrawings({ plan, analysis }: { plan: Plan; analysis: Analysis }) {
   const [id, setId] = useState<DrawingId>('floor');
   const [today] = useState(() => new Date().toISOString().slice(0, 10));
   const svg = useRef<SVGSVGElement | null>(null);
-  const sheetSvg = useRef<SVGSVGElement | null>(null);
+  const sheetSvgs = useRef<(SVGSVGElement | null)[]>([]);
   // the rack elevation is there only when the plan has a rack or an equipment box
   const drawings = useMemo(
     () => buildAllDrawings(plan, analysis).filter((d) => d.id !== 'rack' || analysis.gear.rack),
     [plan, analysis],
   );
-  const sheet = useMemo(() => buildSheet(plan, analysis, today), [plan, analysis, today]);
+  const sheets = useMemo(() => buildSheets(plan, analysis, today), [plan, analysis, today]);
   const drawing = drawings.find((d) => d.id === id) ?? drawings[0];
+
+  // the browser may ask once to allow several downloads
+  const saveSheets = () =>
+    sheets.forEach((_, i) =>
+      setTimeout(() => saveSvg(sheetSvgs.current[i], `k4av-drawing-sheet-${i + 1}.svg`), i * 400),
+    );
 
   return (
     <div className="planner-plans">
@@ -71,21 +78,33 @@ export default function PlanDrawings({ plan, analysis }: { plan: Plan; analysis:
         <button type="button" onClick={() => saveSvg(svg.current, fileNames[drawing.id])}>
           Save this drawing (SVG)
         </button>
-        <button type="button" onClick={() => saveSvg(sheetSvg.current, 'k4av-drawing-sheet.svg')}>
-          Save the sheet (SVG)
+        <button type="button" onClick={saveSheets}>
+          Save the sheets (SVG)
         </button>
         <button type="button" className="primary" onClick={() => window.print()}>
-          Print the sheet or save it as PDF
+          Print the sheets or save them as PDF
         </button>
       </div>
       <p className="planner-plans-note">
-        One {sheet.paper.name} sheet with all four drawings at {sheet.scale.label}. In the print dialog choose Save as
-        PDF, and set margins to none.
+        {sheets.length} {sheets[0].paper.name} sheets: the four drawings at {sheets[0].scale?.label}, the cabling plan
+        at {sheets[1].scale?.label}, and the device schedule with the rack. In the print dialog choose Save as PDF, and
+        set margins to none.
       </p>
       {createPortal(
         <div className="planner-print-root">
-          <style>{`@page { size: ${sheet.paper.w}pt ${sheet.paper.h}pt; margin: 0 }`}</style>
-          <PrintSheet sheet={sheet} svgRef={sheetSvg} />
+          <style>{`@page { size: ${sheets[0].paper.w}pt ${sheets[0].paper.h}pt; margin: 0 }`}</style>
+          {sheets.map((sheet, i) => (
+            <div key={i} className="planner-print-page">
+              <PrintSheet
+                sheet={sheet}
+                number={i + 1}
+                of={sheets.length}
+                svgRef={(el) => {
+                  sheetSvgs.current[i] = el;
+                }}
+              />
+            </div>
+          ))}
         </div>,
         document.body,
       )}

@@ -31,6 +31,9 @@ export const drawingStyles = `
 .s-rack-laptop{fill:none;stroke:#52606d;stroke-width:1.2;stroke-dasharray:6 3}
 .s-rack-power{fill:#ffe0e0;stroke:#1f2933;stroke-width:1}
 .s-rack-blank{fill:#f4f6f8;stroke:#8896a5;stroke-width:1}
+.s-head{fill:#1f2933}
+.s-group{fill:#e9eef3}
+.s-table{fill:none;stroke:#8896a5;stroke-width:.7}
 .s-person{fill:#cfe0ff;stroke:#3a6fd8;stroke-width:1.2}
 .s-frame{fill:none;stroke:#1f2933;stroke-width:1.4}
 .s-rule{fill:none;stroke:#1f2933;stroke-width:.8}

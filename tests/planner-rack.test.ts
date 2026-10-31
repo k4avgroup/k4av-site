@@ -321,7 +321,7 @@ test('the drawings include a cabling plan and a rack elevation by function, with
   const all = buildAllDrawings(p, a);
   assert.deepEqual(
     all.map((d) => d.id),
-    ['floor', 'ceiling', 'front', 'side', 'cabling', 'rack'],
+    ['floor', 'ceiling', 'front', 'side', 'cabling', 'rack', 'schedule'],
   );
   const rack = rackElevation(p, a);
   const words = texts(rack);
@@ -371,7 +371,7 @@ test('a rack outside the room is drawn beside the plan, not off the page', () =>
   assert.ok(texts(cabling).includes('AV rack, location TBD'));
 });
 
-test('every new choice travels in the link, and every package draws all six drawings', () => {
+test('every new choice travels in the link, and every package draws all seven drawings', () => {
   const samples = [
     room('huddle', 'standard', { shape: 'semi', seats: 5 }),
     room('huddle', 'standard', { endChairs: true, seats: 5 }),
